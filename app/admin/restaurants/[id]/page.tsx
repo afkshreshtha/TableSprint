@@ -16,21 +16,26 @@ import {
   UtensilsCrossed,
   Loader2,
 } from 'lucide-react';
+import type { Tables } from '@/types/supabase';
 
-interface RestaurantDetails {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  slug: string;
-  created_at: string;
-  is_active: boolean;
-  subscription?: any;
-  tables?: any[];
-  menu_items?: any[];
-  orders?: any[];
-  staff?: any[];
-}
+// ── Derived types from generated schema ──────────────────────────────────────
+type Restaurant         = Tables<'restaurants'>;
+type Subscription       = Tables<'restaurant_subscriptions'>;
+type SubscriptionPlan   = Tables<'subscription_plans'>;
+type TableRow           = Tables<'tables'>;
+type MenuItem           = Tables<'menu_items'>;
+type Staff              = Tables<'restaurant_staff'>;
+type Order              = Tables<'orders'>;
+
+// ── Joined type matching the select query ────────────────────────────────────
+type RestaurantDetails = Restaurant & {
+  restaurant_subscriptions: (Subscription & {
+    subscription_plans: SubscriptionPlan;
+  }) | null;
+  tables: TableRow[];
+  menu_items: MenuItem[];
+  restaurant_staff: Staff[];
+};
 
 export default function RestaurantDetailsPage() {
   const router = useRouter();
@@ -49,12 +54,12 @@ export default function RestaurantDetailsPage() {
     if (params.id) {
       fetchRestaurantDetails(params.id as string);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
 
   const fetchRestaurantDetails = async (id: string) => {
     try {
-      // Fetch restaurant with related data
-      const { data: restaurantData, error: restaurantError } = await supabase
+      const { data, error } = await supabase
         .from('restaurants')
         .select(`
           *,
@@ -69,33 +74,27 @@ export default function RestaurantDetailsPage() {
         .eq('id', id)
         .single();
 
-      if (restaurantError) throw restaurantError;
+      if (error) throw error;
 
-      // Fetch orders count and revenue
+      // orders uses `total` not `total_amount` per your schema
       const { data: orders } = await supabase
         .from('orders')
-        .select('total_amount, status')
+        .select('total, status')
         .eq('restaurant_id', id);
 
-      const totalOrders = orders?.length || 0;
+      const totalOrders = orders?.length ?? 0;
       const totalRevenue = orders
-        ?.filter(o => o.status === 'completed')
-        .reduce((sum, o) => sum + (o.total_amount || 0), 0) || 0;
+        ?.filter((o): o is Order => o.status === 'served')
+        .reduce((sum, o) => sum + (o.total ?? 0), 0) ?? 0;
 
-      setRestaurant({
-        ...restaurantData,
-        subscription: restaurantData.restaurant_subscriptions?.[0],
-        tables: restaurantData.tables,
-        menu_items: restaurantData.menu_items,
-        staff: restaurantData.restaurant_staff,
-      });
+      setRestaurant(data as RestaurantDetails);
 
       setStats({
         totalOrders,
-        totalRevenue: totalRevenue / 100,
-        tablesCount: restaurantData.tables?.length || 0,
-        menuItemsCount: restaurantData.menu_items?.length || 0,
-        staffCount: restaurantData.restaurant_staff?.length || 0,
+        totalRevenue,
+        tablesCount:    data.tables?.length    ?? 0,
+        menuItemsCount: data.menu_items?.length ?? 0,
+        staffCount:     data.restaurant_staff?.length ?? 0,
       });
     } catch (error) {
       console.error('Error fetching restaurant:', error);
@@ -129,6 +128,8 @@ export default function RestaurantDetailsPage() {
       </AdminLayout>
     );
   }
+
+  const sub = restaurant.restaurant_subscriptions;
 
   return (
     <AdminLayout>
@@ -176,10 +177,12 @@ export default function RestaurantDetailsPage() {
               }`}>
                 {restaurant.is_active ? 'Active' : 'Suspended'}
               </span>
-              <span className="text-xs text-gray-500 text-right">
-                <Calendar className="w-3 h-3 inline mr-1" />
-                Joined {new Date(restaurant.created_at).toLocaleDateString()}
-              </span>
+              {restaurant.created_at && (
+                <span className="text-xs text-gray-500 text-right">
+                  <Calendar className="w-3 h-3 inline mr-1" />
+                  Joined {new Date(restaurant.created_at).toLocaleDateString()}
+                </span>
+              )}
             </div>
           </div>
 
@@ -226,32 +229,34 @@ export default function RestaurantDetailsPage() {
         </div>
 
         {/* Subscription Info */}
-        {restaurant.subscription && (
+        {sub && (
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <h2 className="text-xl font-bold text-gray-900 mb-4">Subscription Details</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <p className="text-sm text-gray-600 mb-1">Plan</p>
                 <p className="font-semibold text-gray-900">
-                  {restaurant.subscription.subscription_plans?.display_name}
+                  {sub.subscription_plans?.display_name ?? 'N/A'}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-gray-600 mb-1">Status</p>
                 <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                  restaurant.subscription.status === 'active'
+                  sub.status === 'active'
                     ? 'bg-green-100 text-green-700'
-                    : restaurant.subscription.status === 'trialing'
+                    : sub.status === 'trialing'
                     ? 'bg-yellow-100 text-yellow-700'
+                    : sub.status === 'paused'
+                    ? 'bg-blue-100 text-blue-700'
                     : 'bg-gray-100 text-gray-700'
                 }`}>
-                  {restaurant.subscription.status}
+                  {sub.status}
                 </span>
               </div>
               <div>
                 <p className="text-sm text-gray-600 mb-1">Billing Cycle</p>
                 <p className="font-semibold text-gray-900 capitalize">
-                  {restaurant.subscription.billing_cycle || 'N/A'}
+                  {sub.billing_cycle ?? 'N/A'}
                 </p>
               </div>
             </div>

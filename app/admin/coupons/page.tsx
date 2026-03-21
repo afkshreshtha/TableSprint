@@ -120,9 +120,9 @@ export default function CouponsPage() {
       setEditingCoupon(null);
       resetForm();
       fetchCoupons();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error saving coupon:', error);
-      alert(error.message || 'Failed to save coupon');
+      alert((error as { message: string }).message || 'Failed to save coupon');
     } finally {
       setLoading(false);
     }
