@@ -7,7 +7,6 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
-// Razorpay webhook payload types
 interface RazorpaySubscriptionEntity {
   id: string;
   status: string;
@@ -25,7 +24,7 @@ interface RazorpayPaymentEntity {
   subscription_id?: string;
   amount: number;
   currency: string;
-  method?: string;
+  method?: string;         // "upi" | "card" | "netbanking" | "wallet" etc.
   error_description?: string;
 }
 
@@ -93,10 +92,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ received: true });
   } catch (error) {
     console.error("Webhook error:", error);
-    return NextResponse.json(
-      { error: "Webhook handler failed" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
   }
 }
 
@@ -167,7 +163,7 @@ async function handleSubscriptionCharged(
     amount: payment.amount,
     currency: payment.currency,
     status: "success",
-    payment_method: payment.method,
+    payment_method: payment.method ?? null,  // ✅ passes "upi", "card", etc. as-is
     description: `Subscription payment - ${subscription.id}`,
   });
 
@@ -268,6 +264,7 @@ async function handleSubscriptionCompleted(subscription: RazorpaySubscriptionEnt
 
 async function handlePaymentFailed(payment: RazorpayPaymentEntity) {
   console.log("Payment failed:", payment.id);
+  
 
   const { data: sub } = await supabase
     .from("restaurant_subscriptions")
@@ -284,7 +281,7 @@ async function handlePaymentFailed(payment: RazorpayPaymentEntity) {
     amount: payment.amount,
     currency: payment.currency,
     status: "failed",
-    payment_method: payment.method,
+    payment_method: payment.method ?? null,  // ✅ same fix here
     description: `Payment failed - ${payment.error_description ?? "Unknown error"}`,
   });
 
