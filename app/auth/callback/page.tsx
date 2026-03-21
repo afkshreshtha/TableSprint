@@ -171,11 +171,16 @@ export default function AuthCallbackPage() {
 
         console.log("📊 Redirecting owner to dashboard...");
         router.push("/dashboard");
-      } catch (err: any) {
-        console.error("Callback error:", err);
-        setError(err.message || "Authentication failed");
+      } catch (err: unknown) {
+        const error = err as { message?: string };
+        console.error("Callback error:", error);
+        setError(error.message ?? "Authentication failed");
         setTimeout(
-          () => router.push("/login?error=" + encodeURIComponent(err.message)),
+          () =>
+            router.push(
+              "/login?error=" +
+                encodeURIComponent(error.message ?? "auth_failed"),
+            ),
           2000,
         );
       }

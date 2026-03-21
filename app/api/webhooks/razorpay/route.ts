@@ -7,12 +7,41 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
+// Razorpay webhook payload types
+interface RazorpaySubscriptionEntity {
+  id: string;
+  status: string;
+  current_start: number;
+  current_end: number;
+  notes?: {
+    restaurant_id?: string;
+    billing_cycle?: string;
+  };
+}
+
+interface RazorpayPaymentEntity {
+  id: string;
+  order_id?: string;
+  subscription_id?: string;
+  amount: number;
+  currency: string;
+  method?: string;
+  error_description?: string;
+}
+
+interface RazorpayWebhookEvent {
+  event: string;
+  payload: {
+    subscription?: { entity: RazorpaySubscriptionEntity };
+    payment?: { entity: RazorpayPaymentEntity };
+  };
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.text();
     const signature = request.headers.get("x-razorpay-signature");
 
-    // Verify webhook signature
     const expectedSignature = crypto
       .createHmac("sha256", process.env.RAZORPAY_WEBHOOK_SECRET!)
       .update(body)
@@ -23,39 +52,33 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
 
-    const event = JSON.parse(body);
+    const event = JSON.parse(body) as RazorpayWebhookEvent;
     console.log("Razorpay webhook event:", event.event);
 
     switch (event.event) {
       case "subscription.activated":
-        await handleSubscriptionActivated(event.payload.subscription.entity);
+        await handleSubscriptionActivated(event.payload.subscription!.entity);
         break;
-
       case "subscription.charged":
         await handleSubscriptionCharged(
-          event.payload.subscription.entity,
-          event.payload.payment.entity,
+          event.payload.subscription!.entity,
+          event.payload.payment!.entity,
         );
         break;
-
       case "subscription.cancelled":
-        await handleSubscriptionCancelled(event.payload.subscription.entity);
+        await handleSubscriptionCancelled(event.payload.subscription!.entity);
         break;
-
       case "subscription.paused":
-        await handleSubscriptionPaused(event.payload.subscription.entity);
+        await handleSubscriptionPaused(event.payload.subscription!.entity);
         break;
-
       case "subscription.resumed":
-        await handleSubscriptionResumed(event.payload.subscription.entity);
+        await handleSubscriptionResumed(event.payload.subscription!.entity);
         break;
-
       case "subscription.completed":
-        await handleSubscriptionCompleted(event.payload.subscription.entity);
+        await handleSubscriptionCompleted(event.payload.subscription!.entity);
         break;
-
       case "payment.failed":
-        await handlePaymentFailed(event.payload.payment.entity);
+        await handlePaymentFailed(event.payload.payment!.entity);
         break;
       case "payment.authorized":
       case "payment.captured":
@@ -77,18 +100,15 @@ export async function POST(request: Request) {
   }
 }
 
-async function handleSubscriptionActivated(subscription: any) {
+async function handleSubscriptionActivated(subscription: RazorpaySubscriptionEntity) {
   console.log("Activating subscription:", subscription.id);
 
-  // Get restaurant_id from notes
   const restaurantId = subscription.notes?.restaurant_id;
-
   if (!restaurantId) {
     console.error("No restaurant_id in subscription notes");
     return;
   }
 
-  // Get plan ID
   const { data: plan } = await supabase
     .from("subscription_plans")
     .select("id")
@@ -100,20 +120,15 @@ async function handleSubscriptionActivated(subscription: any) {
     return;
   }
 
-  // Update subscription in database
   const { error } = await supabase
     .from("restaurant_subscriptions")
     .update({
       plan_id: plan.id,
       razorpay_subscription_id: subscription.id,
       status: "active",
-      billing_cycle: subscription.notes?.billing_cycle || "monthly",
-      current_period_start: new Date(
-        subscription.current_start * 1000,
-      ).toISOString(),
-      current_period_end: new Date(
-        subscription.current_end * 1000,
-      ).toISOString(),
+      billing_cycle: subscription.notes?.billing_cycle ?? "monthly",
+      current_period_start: new Date(subscription.current_start * 1000).toISOString(),
+      current_period_end: new Date(subscription.current_end * 1000).toISOString(),
       trial_start: null,
       trial_end: null,
       updated_at: new Date().toISOString(),
@@ -127,10 +142,12 @@ async function handleSubscriptionActivated(subscription: any) {
   }
 }
 
-async function handleSubscriptionCharged(subscription: any, payment: any) {
+async function handleSubscriptionCharged(
+  subscription: RazorpaySubscriptionEntity,
+  payment: RazorpayPaymentEntity,
+) {
   console.log("Subscription charged:", subscription.id);
 
-  // Find restaurant by subscription ID
   const { data: sub } = await supabase
     .from("restaurant_subscriptions")
     .select("restaurant_id, id, plan_id")
@@ -142,7 +159,6 @@ async function handleSubscriptionCharged(subscription: any, payment: any) {
     return;
   }
 
-  // Record payment
   await supabase.from("payment_history").insert({
     restaurant_id: sub.restaurant_id,
     subscription_id: sub.id,
@@ -155,17 +171,12 @@ async function handleSubscriptionCharged(subscription: any, payment: any) {
     description: `Subscription payment - ${subscription.id}`,
   });
 
-  // Update subscription period and ensure it's active
   await supabase
     .from("restaurant_subscriptions")
     .update({
       status: "active",
-      current_period_start: new Date(
-        subscription.current_start * 1000,
-      ).toISOString(),
-      current_period_end: new Date(
-        subscription.current_end * 1000,
-      ).toISOString(),
+      current_period_start: new Date(subscription.current_start * 1000).toISOString(),
+      current_period_end: new Date(subscription.current_end * 1000).toISOString(),
       updated_at: new Date().toISOString(),
     })
     .eq("razorpay_subscription_id", subscription.id);
@@ -173,7 +184,7 @@ async function handleSubscriptionCharged(subscription: any, payment: any) {
   console.log("✅ Payment recorded for subscription:", subscription.id);
 }
 
-async function handleSubscriptionCancelled(subscription: any) {
+async function handleSubscriptionCancelled(subscription: RazorpaySubscriptionEntity) {
   console.log("Subscription cancelled:", subscription.id);
 
   const { data: sub } = await supabase
@@ -197,31 +208,25 @@ async function handleSubscriptionCancelled(subscription: any) {
   console.log("✅ Subscription cancelled:", subscription.id);
 }
 
-async function handleSubscriptionPaused(subscription: any) {
+async function handleSubscriptionPaused(subscription: RazorpaySubscriptionEntity) {
   console.log("Subscription paused:", subscription.id);
 
   await supabase
     .from("restaurant_subscriptions")
-    .update({
-      status: "paused",
-      updated_at: new Date().toISOString(),
-    })
+    .update({ status: "paused", updated_at: new Date().toISOString() })
     .eq("razorpay_subscription_id", subscription.id);
 }
 
-async function handleSubscriptionResumed(subscription: any) {
+async function handleSubscriptionResumed(subscription: RazorpaySubscriptionEntity) {
   console.log("Subscription resumed:", subscription.id);
 
   await supabase
     .from("restaurant_subscriptions")
-    .update({
-      status: "active",
-      updated_at: new Date().toISOString(),
-    })
+    .update({ status: "active", updated_at: new Date().toISOString() })
     .eq("razorpay_subscription_id", subscription.id);
 }
 
-async function handleSubscriptionCompleted(subscription: any) {
+async function handleSubscriptionCompleted(subscription: RazorpaySubscriptionEntity) {
   console.log("Subscription completed:", subscription.id);
 
   const { data: sub } = await supabase
@@ -232,7 +237,6 @@ async function handleSubscriptionCompleted(subscription: any) {
 
   if (!sub) return;
 
-  // Get free plan
   const { data: freePlan } = await supabase
     .from("subscription_plans")
     .select("id")
@@ -241,7 +245,6 @@ async function handleSubscriptionCompleted(subscription: any) {
 
   if (!freePlan) return;
 
-  // Downgrade to free plan
   await supabase
     .from("restaurant_subscriptions")
     .update({
@@ -255,7 +258,6 @@ async function handleSubscriptionCompleted(subscription: any) {
     })
     .eq("razorpay_subscription_id", subscription.id);
 
-  // Apply free plan limits
   await supabase.rpc("handle_plan_downgrade", {
     rest_id: sub.restaurant_id,
     new_plan_id: freePlan.id,
@@ -264,10 +266,9 @@ async function handleSubscriptionCompleted(subscription: any) {
   console.log("✅ Downgraded to free plan:", sub.restaurant_id);
 }
 
-async function handlePaymentFailed(payment: any) {
+async function handlePaymentFailed(payment: RazorpayPaymentEntity) {
   console.log("Payment failed:", payment.id);
 
-  // Find subscription by payment
   const { data: sub } = await supabase
     .from("restaurant_subscriptions")
     .select("restaurant_id, id")
@@ -276,7 +277,6 @@ async function handlePaymentFailed(payment: any) {
 
   if (!sub) return;
 
-  // Record failed payment
   await supabase.from("payment_history").insert({
     restaurant_id: sub.restaurant_id,
     subscription_id: sub.id,
@@ -285,16 +285,12 @@ async function handlePaymentFailed(payment: any) {
     currency: payment.currency,
     status: "failed",
     payment_method: payment.method,
-    description: `Payment failed - ${payment.error_description || "Unknown error"}`,
+    description: `Payment failed - ${payment.error_description ?? "Unknown error"}`,
   });
 
-  // Update subscription status to past_due
   await supabase
     .from("restaurant_subscriptions")
-    .update({
-      status: "past_due",
-      updated_at: new Date().toISOString(),
-    })
+    .update({ status: "past_due", updated_at: new Date().toISOString() })
     .eq("razorpay_subscription_id", payment.subscription_id);
 
   console.log("✅ Payment failure recorded:", payment.id);

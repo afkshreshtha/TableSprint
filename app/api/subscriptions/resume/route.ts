@@ -12,6 +12,15 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+interface RazorpayError {
+  error?: { description?: string };
+  message?: string;
+}
+
+interface RazorpaySubscriptions {
+  resume: (id: string, options: { resume_at: string }) => Promise<void>;
+}
+
 export async function POST(request: Request) {
   try {
     const { restaurantId } = await request.json();
@@ -34,9 +43,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Subscription is not paused' }, { status: 400 });
     }
 
-    await (razorpay.subscriptions as any).resume(sub.razorpay_subscription_id, {
-      resume_at: 'now',
-    });
+    await (razorpay.subscriptions as unknown as RazorpaySubscriptions).resume(
+      sub.razorpay_subscription_id,
+      { resume_at: 'now' }
+    );
 
     await supabase
       .from('restaurant_subscriptions')
@@ -44,8 +54,12 @@ export async function POST(request: Request) {
       .eq('restaurant_id', restaurantId);
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (err: unknown) {
+    const error = err as RazorpayError;
     console.error('Resume error:', error);
-    return NextResponse.json({ error: error.message || 'Failed to resume' }, { status: 500 });
+    return NextResponse.json(
+      { error: error.message ?? 'Failed to resume' },
+      { status: 500 }
+    );
   }
 }
