@@ -11,8 +11,6 @@ import {
   CreditCard,
   AlertCircle,
   Zap,
-  PauseCircle,
-  PlayCircle,
   XCircle,
   Calendar,
   RefreshCw,
@@ -59,12 +57,6 @@ const STATUS_CONFIG: Record<
     bg: "bg-blue-50 border-blue-200",
     dot: "bg-blue-500",
   },
-  paused: {
-    label: "Paused",
-    color: "text-amber-700",
-    bg: "bg-amber-50 border-amber-200",
-    dot: "bg-amber-500",
-  },
   cancelled: {
     label: "Cancelled",
     color: "text-red-700",
@@ -96,20 +88,15 @@ export default function PricingPage() {
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">(
-    "monthly",
-  );
+  const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
   const [processing, setProcessing] = useState(false);
   const [startingTrial, setStartingTrial] = useState(false);
   const [cancelling, setCancelling] = useState(false);
-  const [pausing, setPausing] = useState(false);
   const razorpayLoaded = useRazorpay();
 
   useEffect(() => {
     const init = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
       const { data: restaurant } = await supabase
@@ -182,11 +169,7 @@ export default function PricingPage() {
 
   const handleSubscribe = async () => {
     if (!restaurantId) return;
-    if (
-      !razorpayLoaded ||
-      typeof window === "undefined" ||
-      !(window as any).Razorpay
-    ) {
+    if (!razorpayLoaded || typeof window === "undefined" || !(window as any).Razorpay) {
       alert("Payment system is loading. Please try again.");
       return;
     }
@@ -208,11 +191,7 @@ export default function PricingPage() {
       const res = await fetch("/api/subscriptions/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          planId: proPlan.id,
-          billingCycle,
-          restaurantId,
-        }),
+        body: JSON.stringify({ planId: proPlan.id, billingCycle, restaurantId }),
       });
 
       const data = await res.json();
@@ -256,10 +235,7 @@ export default function PricingPage() {
               alert("✅ Subscription activated successfully!");
               window.location.reload();
             } else {
-              alert(
-                "Payment verification failed. Contact support with ID: " +
-                  paymentId,
-              );
+              alert("Payment verification failed. Contact support with ID: " + paymentId);
               setProcessing(false);
             }
           } catch {
@@ -272,10 +248,7 @@ export default function PricingPage() {
 
       const rzp = new (window as any).Razorpay(options);
       rzp.on("payment.failed", (response: any) => {
-        alert(
-          "Payment failed: " +
-            (response?.error?.description || "Unknown error"),
-        );
+        alert("Payment failed: " + (response?.error?.description || "Unknown error"));
         setProcessing(false);
       });
       rzp.open();
@@ -286,10 +259,7 @@ export default function PricingPage() {
   };
 
   const handleCancel = async () => {
-    if (
-      !restaurantId ||
-      !confirm("Cancel subscription? You'll keep access until the period ends.")
-    )
+    if (!restaurantId || !confirm("Cancel subscription? You'll keep access until the period ends."))
       return;
     setCancelling(true);
     try {
@@ -312,60 +282,8 @@ export default function PricingPage() {
     }
   };
 
-  const handlePause = async () => {
-    if (
-      !restaurantId ||
-      !confirm("Pause your subscription? Billing stops until you resume.")
-    )
-      return;
-    setPausing(true);
-    try {
-      const res = await fetch("/api/subscriptions/pause", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ restaurantId }),
-      });
-      if (res.ok) {
-        alert("Subscription paused.");
-        window.location.reload();
-      } else {
-        const d = await res.json();
-        alert(d.error || "Failed to pause");
-      }
-    } catch {
-      alert("Failed to pause subscription");
-    } finally {
-      setPausing(false);
-    }
-  };
-
-  const handleResume = async () => {
-    if (!restaurantId) return;
-    setPausing(true);
-    try {
-      const res = await fetch("/api/subscriptions/resume", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ restaurantId }),
-      });
-      if (res.ok) {
-        alert("Subscription resumed.");
-        window.location.reload();
-      } else {
-        const d = await res.json();
-        alert(d.error || "Failed to resume");
-      }
-    } catch {
-      alert("Failed to resume subscription");
-    } finally {
-      setPausing(false);
-    }
-  };
-
   const getDaysRemaining = (endDate: string) =>
-    Math.ceil(
-      (new Date(endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
-    );
+    Math.ceil((new Date(endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 
   if (loading) {
     return (
@@ -379,42 +297,30 @@ export default function PricingPage() {
     );
   }
 
-  const currentPlan = plans.find((p) => p.id === subscription?.plan_id);
-  const isFree =
-    currentPlan?.name === "free" || !subscription?.razorpay_subscription_id;
-  const isTrialing = subscription?.status === "trialing";
-  const isActive = subscription?.status === "active";
-  const isPaused = subscription?.status === "paused";
-  const isCancelled = subscription?.status === "cancelled";
-  const hasProAccess = isActive || isTrialing || isPaused;
-  const trialDaysLeft =
-    isTrialing && subscription?.trial_end
-      ? getDaysRemaining(subscription.trial_end)
-      : 0;
+  const currentPlan   = plans.find((p) => p.id === subscription?.plan_id);
+  const isTrialing    = subscription?.status === "trialing";
+  const isActive      = subscription?.status === "active";
+  const isCancelled   = subscription?.status === "cancelled";
+  const hasProAccess  = isActive || isTrialing;
+  const trialDaysLeft = isTrialing && subscription?.trial_end
+    ? getDaysRemaining(subscription.trial_end) : 0;
   const periodDaysLeft = subscription?.current_period_end
-    ? getDaysRemaining(subscription.current_period_end)
-    : 0;
-  const statusConfig = STATUS_CONFIG[subscription?.status || "free"];
+    ? getDaysRemaining(subscription.current_period_end) : 0;
+  const statusConfig  = STATUS_CONFIG[subscription?.status || "free"];
 
   return (
     <ProtectedRoute allowedRoles={["owner"]}>
       <DashboardLayout>
         <div className="max-w-5xl mx-auto px-4 py-8 space-y-8">
+
           {/* Header */}
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              Subscription & Billing
-            </h1>
-            <p className="text-gray-500 mt-1 text-sm">
-              Manage your TableSprint plan
-            </p>
+            <h1 className="text-2xl font-bold text-gray-900">Subscription & Billing</h1>
+            <p className="text-gray-500 mt-1 text-sm">Manage your TableSprint plan</p>
           </div>
 
-          {/* ── ACTIVE SUBSCRIPTION MANAGEMENT CARD ── */}
-          {(hasProAccess ||
-            isPaused ||
-            isCancelled ||
-            subscription?.razorpay_subscription_id) && (
+          {/* ── ACTIVE SUBSCRIPTION CARD ── */}
+          {(hasProAccess || isCancelled || subscription?.razorpay_subscription_id) && (
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
               {/* Card Header */}
               <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
@@ -429,131 +335,80 @@ export default function PricingPage() {
                     </p>
                   </div>
                 </div>
-                {/* Status Badge */}
-                <div
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm font-medium ${statusConfig.bg} ${statusConfig.color}`}
-                >
-                  <span
-                    className={`w-2 h-2 rounded-full ${statusConfig.dot}`}
-                  />
+                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm font-medium ${statusConfig.bg} ${statusConfig.color}`}>
+                  <span className={`w-2 h-2 rounded-full ${statusConfig.dot}`} />
                   {statusConfig.label}
                   {subscription?.cancel_at_period_end && isActive && (
-                    <span className="text-xs font-normal">
-                      · Cancels at period end
-                    </span>
+                    <span className="text-xs font-normal">· Cancels at period end</span>
                   )}
                 </div>
               </div>
 
               {/* Card Body */}
               <div className="px-6 py-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {/* Period Info */}
                 <div className="flex items-start gap-3">
                   <Calendar className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
                   <div>
                     <p className="text-xs text-gray-500 font-medium uppercase tracking-wide mb-0.5">
-                      {subscription?.cancel_at_period_end
-                        ? "Expires"
-                        : isPaused
-                          ? "Paused since"
-                          : "Renews"}
+                      {subscription?.cancel_at_period_end ? "Expires" : "Renews"}
                     </p>
                     <p className="text-sm font-semibold text-gray-900">
                       {subscription?.current_period_end
-                        ? new Date(
-                            subscription.current_period_end,
-                          ).toLocaleDateString("en-IN", {
-                            day: "numeric",
-                            month: "short",
-                            year: "numeric",
+                        ? new Date(subscription.current_period_end).toLocaleDateString("en-IN", {
+                            day: "numeric", month: "short", year: "numeric",
                           })
                         : "—"}
                     </p>
-                    {subscription?.current_period_end && !isPaused && (
+                    {subscription?.current_period_end && (
                       <p className="text-xs text-gray-400 mt-0.5">
-                        {periodDaysLeft > 0
-                          ? `${periodDaysLeft} days remaining`
-                          : "Expired"}
+                        {periodDaysLeft > 0 ? `${periodDaysLeft} days remaining` : "Expired"}
                       </p>
                     )}
                   </div>
                 </div>
 
-                {/* Billing Amount */}
                 <div className="flex items-start gap-3">
                   <CreditCard className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
                   <div>
-                    <p className="text-xs text-gray-500 font-medium uppercase tracking-wide mb-0.5">
-                      Amount
-                    </p>
+                    <p className="text-xs text-gray-500 font-medium uppercase tracking-wide mb-0.5">Amount</p>
                     <p className="text-sm font-semibold text-gray-900">
                       {subscription?.billing_cycle === "yearly"
                         ? `₹${(plans.find((p) => p.name === "pro")?.price_yearly || 0) / 100}/yr`
                         : `₹${(plans.find((p) => p.name === "pro")?.price_monthly || 0) / 100}/mo`}
                     </p>
                     {subscription?.billing_cycle === "yearly" && (
-                      <p className="text-xs text-emerald-600 mt-0.5">
-                        20% saved vs monthly
-                      </p>
+                      <p className="text-xs text-emerald-600 mt-0.5">20% saved vs monthly</p>
                     )}
                   </div>
                 </div>
 
-                {/* Trial Info */}
                 {isTrialing && subscription?.trial_end && (
                   <div className="flex items-start gap-3">
                     <Zap className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
                     <div>
-                      <p className="text-xs text-gray-500 font-medium uppercase tracking-wide mb-0.5">
-                        Trial
-                      </p>
-                      <p className="text-sm font-semibold text-gray-900">
-                        {trialDaysLeft} days left
-                      </p>
+                      <p className="text-xs text-gray-500 font-medium uppercase tracking-wide mb-0.5">Trial</p>
+                      <p className="text-sm font-semibold text-gray-900">{trialDaysLeft} days left</p>
                       <p className="text-xs text-gray-400 mt-0.5">
-                        Ends{" "}
-                        {new Date(subscription.trial_end).toLocaleDateString(
-                          "en-IN",
-                          { day: "numeric", month: "short" },
-                        )}
+                        Ends {new Date(subscription.trial_end).toLocaleDateString("en-IN", {
+                          day: "numeric", month: "short",
+                        })}
                       </p>
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* Paused Banner */}
-              {isPaused && (
-                <div className="mx-6 mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-3">
-                  <PauseCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-amber-800">
-                      Subscription is paused
-                    </p>
-                    <p className="text-xs text-amber-600 mt-0.5">
-                      Billing is stopped. Resume anytime to continue your Pro
-                      access.
-                    </p>
-                  </div>
-                </div>
-              )}
-
               {/* Cancel Warning */}
               {subscription?.cancel_at_period_end && isActive && (
                 <div className="mx-6 mb-4 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3">
                   <XCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-red-800">
-                      Cancellation scheduled
-                    </p>
+                    <p className="text-sm font-medium text-red-800">Cancellation scheduled</p>
                     <p className="text-xs text-red-600 mt-0.5">
                       Your plan will downgrade to Free on{" "}
                       {subscription.current_period_end
-                        ? new Date(
-                            subscription.current_period_end,
-                          ).toLocaleDateString("en-IN", {
-                            day: "numeric",
-                            month: "long",
+                        ? new Date(subscription.current_period_end).toLocaleDateString("en-IN", {
+                            day: "numeric", month: "long",
                           })
                         : "period end"}
                       . Your data will be preserved.
@@ -564,60 +419,30 @@ export default function PricingPage() {
 
               {/* Action Buttons */}
               <div className="px-6 pb-5 flex flex-wrap gap-2">
-                {isPaused ? (
+                {isActive && !subscription?.cancel_at_period_end && (
                   <button
-                    onClick={handleResume}
-                    disabled={pausing}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                    onClick={handleCancel}
+                    disabled={cancelling}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-red-200 text-red-600 text-sm font-medium rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors"
                   >
-                    {pausing ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <PlayCircle className="w-4 h-4" />
-                    )}
-                    Resume Subscription
+                    {cancelling
+                      ? <Loader2 className="w-4 h-4 animate-spin" />
+                      : <XCircle className="w-4 h-4" />}
+                    Cancel Plan
                   </button>
-                ) : isActive && !subscription?.cancel_at_period_end ? (
-                  <>
-                    <button
-                      onClick={handlePause}
-                      disabled={pausing}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-amber-300 text-amber-700 text-sm font-medium rounded-lg hover:bg-amber-50 disabled:opacity-50 transition-colors"
-                    >
-                      {pausing ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <PauseCircle className="w-4 h-4" />
-                      )}
-                      Pause Billing
-                    </button>
-                    <button
-                      onClick={handleCancel}
-                      disabled={cancelling}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-red-200 text-red-600 text-sm font-medium rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors"
-                    >
-                      {cancelling ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <XCircle className="w-4 h-4" />
-                      )}
-                      Cancel Plan
-                    </button>
-                  </>
-                ) : isTrialing ? (
+                )}
+                {isTrialing && (
                   <button
                     onClick={handleSubscribe}
                     disabled={processing}
                     className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700 disabled:opacity-50 transition-colors"
                   >
-                    {processing ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <CreditCard className="w-4 h-4" />
-                    )}
+                    {processing
+                      ? <Loader2 className="w-4 h-4 animate-spin" />
+                      : <CreditCard className="w-4 h-4" />}
                     Subscribe to Continue
                   </button>
-                ) : null}
+                )}
               </div>
             </div>
           )}
@@ -632,22 +457,19 @@ export default function PricingPage() {
                   <span className="font-bold text-lg">Free Trial Active</span>
                 </div>
                 <p className="text-orange-100">
-                  <strong className="text-white">{trialDaysLeft} days</strong>{" "}
-                  remaining · All Pro features unlocked
+                  <strong className="text-white">{trialDaysLeft} days</strong> remaining · All Pro features unlocked
                 </p>
                 <p className="text-orange-200 text-sm mt-1">
-                  Trial ends{" "}
-                  {new Date(subscription.trial_end).toLocaleDateString(
-                    "en-IN",
-                    { day: "numeric", month: "long", year: "numeric" },
-                  )}
+                  Trial ends {new Date(subscription.trial_end).toLocaleDateString("en-IN", {
+                    day: "numeric", month: "long", year: "numeric",
+                  })}
                 </p>
               </div>
             </div>
           )}
 
-          {/* ── BILLING TOGGLE (only for free/trial users) ── */}
-          {!isActive && !isPaused && (
+          {/* ── BILLING TOGGLE ── */}
+          {!isActive && (
             <div className="flex justify-center">
               <div className="bg-gray-100 rounded-xl p-1 inline-flex gap-1">
                 <button
@@ -669,9 +491,7 @@ export default function PricingPage() {
                   }`}
                 >
                   Yearly
-                  <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">
-                    −20%
-                  </span>
+                  <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">−20%</span>
                 </button>
               </div>
             </div>
@@ -680,46 +500,21 @@ export default function PricingPage() {
           {/* ── PLANS GRID ── */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {plans.map((plan) => {
-              const price =
-                billingCycle === "yearly"
-                  ? plan.price_yearly
-                  : plan.price_monthly;
+              const price = billingCycle === "yearly" ? plan.price_yearly : plan.price_monthly;
               const isCurrentPlan = currentPlan?.id === plan.id;
               const isPro = plan.name === "pro";
 
               const features = [
-                {
-                  label: `${plan.features.max_tables || "Unlimited"} tables`,
-                  included: true,
-                },
-                {
-                  label: `${plan.features.max_menu_items || "Unlimited"} menu items`,
-                  included: true,
-                },
-                { label: "Unlimited orders", included: true },
-                { label: "QR ordering", included: true },
-                { label: "Kitchen display", included: true },
-                {
-                  label: "Chef staff account",
-                  included: !!plan.features.staff_management,
-                },
-
-                {
-                  label: "UPI payment links",
-                  included: !!plan.features.payment_integration,
-                },
-                {
-                  label: "Support",
-                  included: !!plan.features.support,
-                },
-                {
-                  label: "Custom branding",
-                  included: !!plan.features.custom_branding,
-                },
-                {
-                  label: `${plan.features.analytics || "Basic"} analytics`,
-                  included: true,
-                },
+                { label: `${plan.features.max_tables || "Unlimited"} tables`,     included: true },
+                { label: `${plan.features.max_menu_items || "Unlimited"} menu items`, included: true },
+                { label: "Unlimited orders",      included: true },
+                { label: "QR ordering",           included: true },
+                { label: "Kitchen display",       included: true },
+                { label: "Chef staff account",    included: !!plan.features.staff_management },
+                { label: "UPI payment links",     included: !!plan.features.payment_integration },
+                { label: "Support",               included: !!plan.features.support },
+                { label: "Custom branding",       included: !!plan.features.custom_branding },
+                { label: `${plan.features.analytics || "Basic"} analytics`, included: true },
               ];
 
               return (
@@ -739,16 +534,11 @@ export default function PricingPage() {
                     </div>
                   )}
 
-                  {/* Plan Header */}
                   <div className="mb-6">
-                    <h3 className="text-lg font-bold text-gray-900 mb-3">
-                      {plan.display_name}
-                    </h3>
+                    <h3 className="text-lg font-bold text-gray-900 mb-3">{plan.display_name}</h3>
                     <div className="flex items-end gap-1">
                       <span className="text-4xl font-bold text-gray-900">
-                        {price === 0
-                          ? "Free"
-                          : `₹${(price / 100).toLocaleString("en-IN")}`}
+                        {price === 0 ? "Free" : `₹${(price / 100).toLocaleString("en-IN")}`}
                       </span>
                       {price > 0 && (
                         <span className="text-gray-400 mb-1.5 text-sm">
@@ -758,48 +548,32 @@ export default function PricingPage() {
                     </div>
                     {billingCycle === "yearly" && price > 0 && (
                       <p className="text-sm text-emerald-600 mt-1 font-medium">
-                        ₹
-                        {(
-                          (plan.price_monthly * 12 - price) /
-                          100
-                        ).toLocaleString("en-IN")}{" "}
-                        saved vs monthly
+                        ₹{((plan.price_monthly * 12 - price) / 100).toLocaleString("en-IN")} saved vs monthly
                       </p>
                     )}
                   </div>
 
-                  {/* Features */}
                   <ul className="space-y-2.5 mb-8 flex-1">
                     {features.map((f) => (
                       <li key={f.label} className="flex items-center gap-2.5">
-                        {f.included ? (
-                          <Check className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                        ) : (
-                          <X className="w-4 h-4 text-gray-300 flex-shrink-0" />
-                        )}
-                        <span
-                          className={`text-sm ${f.included ? "text-gray-700" : "text-gray-400"}`}
-                        >
+                        {f.included
+                          ? <Check className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                          : <X className="w-4 h-4 text-gray-300 flex-shrink-0" />}
+                        <span className={`text-sm ${f.included ? "text-gray-700" : "text-gray-400"}`}>
                           {f.label}
                         </span>
                       </li>
                     ))}
-                    <li className="text-xs text-gray-400 pt-1 pl-6">
-                      {plan.features.support} support
-                    </li>
+                    <li className="text-xs text-gray-400 pt-1 pl-6">{plan.features.support} support</li>
                   </ul>
 
-                  {/* CTA */}
                   <div className="space-y-2">
-                    {/* Currently on this plan and it's pro with active/trial access */}
                     {isCurrentPlan && isPro && hasProAccess && (
                       <div className="flex items-center justify-center gap-2 px-4 py-3 bg-emerald-50 text-emerald-700 rounded-xl text-sm font-semibold border border-emerald-200">
-                        <Check className="w-4 h-4" />
-                        Current Plan
+                        <Check className="w-4 h-4" /> Current Plan
                       </div>
                     )}
 
-                    {/* Free plan — current */}
                     {isCurrentPlan && !isPro && (
                       <>
                         <div className="flex items-center justify-center px-4 py-3 bg-gray-50 text-gray-500 rounded-xl text-sm font-medium border border-gray-200">
@@ -810,17 +584,12 @@ export default function PricingPage() {
                           disabled={startingTrial}
                           className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-orange-600 text-white rounded-xl text-sm font-semibold hover:bg-orange-700 disabled:opacity-50 transition-colors"
                         >
-                          {startingTrial ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Zap className="w-4 h-4" />
-                          )}
+                          {startingTrial ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
                           Start 14-Day Free Trial
                         </button>
                       </>
                     )}
 
-                    {/* Pro plan — user is on free */}
                     {isPro && !hasProAccess && !isCancelled && (
                       <>
                         {!isTrialing && (
@@ -829,11 +598,7 @@ export default function PricingPage() {
                             disabled={startingTrial}
                             className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-orange-500 text-orange-600 rounded-xl text-sm font-semibold hover:bg-orange-50 disabled:opacity-50 transition-colors"
                           >
-                            {startingTrial ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Zap className="w-4 h-4" />
-                            )}
+                            {startingTrial ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
                             Start Free Trial
                           </button>
                         )}
@@ -842,45 +607,30 @@ export default function PricingPage() {
                           disabled={processing}
                           className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-orange-600 text-white rounded-xl text-sm font-semibold hover:bg-orange-700 disabled:opacity-50 transition-colors"
                         >
-                          {processing ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <CreditCard className="w-4 h-4" />
-                          )}
-                          {isTrialing
-                            ? "Subscribe to Continue"
-                            : "Subscribe Now"}
+                          {processing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
+                          {isTrialing ? "Subscribe to Continue" : "Subscribe Now"}
                           <ChevronRight className="w-4 h-4 ml-auto" />
                         </button>
                       </>
                     )}
 
-                    {/* Pro plan — cancelled, can resubscribe */}
                     {isPro && isCancelled && (
                       <button
                         onClick={handleSubscribe}
                         disabled={processing}
                         className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-orange-600 text-white rounded-xl text-sm font-semibold hover:bg-orange-700 disabled:opacity-50 transition-colors"
                       >
-                        {processing ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <RefreshCw className="w-4 h-4" />
-                        )}
+                        {processing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
                         Resubscribe
                       </button>
                     )}
                   </div>
 
-                  {isPro &&
-                    plan.trial_days > 0 &&
-                    !hasProAccess &&
-                    !isCancelled && (
-                      <p className="text-center text-xs text-gray-400 mt-3">
-                        {plan.trial_days}-day free trial · No credit card
-                        required
-                      </p>
-                    )}
+                  {isPro && plan.trial_days > 0 && !hasProAccess && !isCancelled && (
+                    <p className="text-center text-xs text-gray-400 mt-3">
+                      {plan.trial_days}-day free trial · No credit card required
+                    </p>
+                  )}
                 </div>
               );
             })}
@@ -891,24 +641,18 @@ export default function PricingPage() {
             <div className="flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" />
               <div className="text-sm text-blue-800">
-                <p className="font-semibold mb-2">
-                  What happens when you downgrade?
-                </p>
+                <p className="font-semibold mb-2">What happens when you downgrade?</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-blue-700">
-                  <p>
-                    · Your data is <strong>never deleted</strong>
-                  </p>
+                  <p>· Your data is <strong>never deleted</strong></p>
                   <p>· Access 5 oldest tables & menu items on Free</p>
-                  <p>
-                    · Extra items hidden but <strong>preserved</strong>
-                  </p>
+                  <p>· Extra items hidden but <strong>preserved</strong></p>
                   <p>· Upgrade again to instantly restore everything</p>
                   <p>· Cancel anytime — access until period ends</p>
-                  <p>· Pause billing without losing your plan</p>
                 </div>
               </div>
             </div>
           </div>
+
         </div>
       </DashboardLayout>
     </ProtectedRoute>

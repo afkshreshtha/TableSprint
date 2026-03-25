@@ -1,4 +1,3 @@
-// components/CartUI.tsx (CLIENT)
 "use client";
 
 import { useAppSelector, useAppDispatch } from "@/store/hooks";
@@ -7,14 +6,27 @@ import { QRCodeSVG } from "qrcode.react";
 import { useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { useCartPersistence } from "@/hooks/useCartPersistence";
-import { ShoppingCart, Plus, Minus, ArrowLeft, Edit3 } from "lucide-react";
+import {
+  ArrowLeft, Edit3, Check, ChevronRight,
+  Smartphone, Copy, Share2, ExternalLink
+} from "lucide-react";
 import { useRouter } from "next/navigation";
+import {
+  RestaurantTheme,
+  DEFAULT_THEME,
+  FONT_PAIRS,
+  hexA,
+  isDarkColor,
+} from "@/types/theme";
 
 interface Restaurant {
   id: string;
   name: string;
   slug: string;
   upi_id: string;
+  theme?: Partial<RestaurantTheme>;
+  tax_percent?: number;            // e.g. 5 means 5% — fetched from restaurants table
+  service_charge_percent?: number; // e.g. 10 means 10% — fetched from restaurants table
 }
 
 export default function CartUI({ restaurant }: { restaurant: Restaurant }) {
@@ -22,23 +34,24 @@ export default function CartUI({ restaurant }: { restaurant: Restaurant }) {
   const dispatch = useAppDispatch();
   const { deleteCartFromSupabase } = useCartPersistence();
   const router = useRouter();
-  
-  const [paymentMarked, setPaymentMarked] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [orderLink, setOrderLink] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<"upi" | "cash">("upi");
-  
-  // Special instructions state
+
+  const [paymentMarked, setPaymentMarked]     = useState(false);
+  const [isProcessing, setIsProcessing]       = useState(false);
+  const [orderLink, setOrderLink]             = useState("");
+  const [paymentMethod, setPaymentMethod]     = useState<"upi" | "cash">("upi");
   const [specialInstructions, setSpecialInstructions] = useState<Record<string, string>>({});
-  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editingItemId, setEditingItemId]     = useState<string | null>(null);
+  const [copied, setCopied]                   = useState(false);
 
-  // Calculate totals
-  const subtotal = cart.total;
-  const tax = subtotal * 0.05;
-  const serviceCharge = subtotal * 0.1;
-  const total = subtotal + tax + serviceCharge;
+  // ── Use restaurant's rates, fallback to 0 if not configured ──
+  const taxRate           = (restaurant.tax_percent ?? 0) / 100;
+  const serviceChargeRate = (restaurant.service_charge_percent ?? 0) / 100;
 
-  // Build UPI string
+  const subtotal      = cart.total;
+  const tax           = subtotal * taxRate;
+  const serviceCharge = subtotal * serviceChargeRate;
+  const total         = subtotal + tax + serviceCharge;
+
   const upiParams = new URLSearchParams({
     pa: restaurant.upi_id || "",
     pn: restaurant.name,
@@ -48,489 +61,381 @@ export default function CartUI({ restaurant }: { restaurant: Restaurant }) {
   });
   const upiLink = `upi://pay?${upiParams.toString()}`;
 
-  const handleIncrease = (itemId: string) => {
-    const item = cart.items.find((i) => i.id === itemId);
-    if (item) {
-      dispatch(addItem({ ...item, quantity: 1 }));
-    }
-  };
+  // ── Resolve theme ─────────────────────────────────────────
+  const t  = { ...DEFAULT_THEME, ...restaurant.theme };
+  const fp = FONT_PAIRS.find((f) => f.key === t.fontPair) ?? FONT_PAIRS[0];
 
-  const handleDecrease = (itemId: string) => {
-    const item = cart.items.find((i) => i.id === itemId);
-    if (!item) return;
+  const dark        = isDarkColor(t.bgColor);
+  const borderCol   = dark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.09)";
+  const mutedText   = hexA(t.textColor, dark ? 0.50 : 0.55);
+  const dimText     = hexA(t.textColor, dark ? 0.28 : 0.35);
+  const a12         = hexA(t.accentColor, 0.12);
+  const a25         = hexA(t.accentColor, 0.25);
+  const a35         = hexA(t.accentColor, 0.35);
+  const surface2    = dark ? hexA(t.textColor, 0.04) : hexA(t.textColor, 0.06);
+  const surface3    = dark ? hexA(t.textColor, 0.07) : hexA(t.textColor, 0.09);
+  const btnBg       = t.buttonStyle === "filled"   ? t.accentColor : "transparent";
+  const btnColor    = t.buttonStyle === "filled"   ? t.bgColor     : t.accentColor;
+  const btnBorder   = t.buttonStyle === "outlined" ? `1.5px solid ${t.accentColor}` : "none";
 
-    if (item.quantity === 1) {
-      const confirmRemove = confirm("Remove this item from cart?");
-      if (confirmRemove) {
-        dispatch(decreaseItem(itemId));
-        // Remove special instructions for this item
-        const newInstructions = { ...specialInstructions };
-        delete newInstructions[itemId];
-        setSpecialInstructions(newInstructions);
-      }
-    } else {
-      dispatch(decreaseItem(itemId));
-    }
-  };
+  const css = `
+    @import url('${fp.googleUrl}');
+    .cu__root { min-height:100vh; background:${t.bgColor}; font-family:'${fp.body}',sans-serif; color:${t.textColor}; }
+    .cu__header { background:${dark?`${t.bgColor}f2`:`${t.bgColor}f5`}; backdrop-filter:blur(16px); border-bottom:1px solid ${borderCol}; padding:16px 20px; position:sticky; top:0; z-index:50; }
+    .cu__back { display:inline-flex; align-items:center; gap:6px; color:${mutedText}; font-size:13px; font-weight:500; background:none; border:none; cursor:pointer; padding:0; transition:color .2s; margin-bottom:14px; font-family:'${fp.body}',sans-serif; }
+    .cu__back:hover { color:${t.accentColor}; }
+    .cu__header-row { display:flex; align-items:flex-end; justify-content:space-between; }
+    .cu__title { font-family:'${fp.display}',serif; font-size:clamp(24px,6vw,32px); font-weight:900; color:${t.textColor}; }
+    .cu__count { font-size:12px; color:${mutedText}; font-weight:500; letter-spacing:1px; text-transform:uppercase; margin-bottom:3px; }
+    .cu__body { max-width:560px; margin:0 auto; padding:20px 16px 120px; }
+    .cu__slbl { font-size:11px; font-weight:600; color:${dimText}; text-transform:uppercase; letter-spacing:1.5px; margin-bottom:12px; display:block; }
+    .cu__card { background:${t.surfaceColor}; border:1px solid ${borderCol}; border-radius:${t.cardRadius}px; padding:16px; margin-bottom:10px; transition:border-color .2s; }
+    .cu__card:hover { border-color:${hexA(t.textColor, dark?0.12:0.15)}; }
+    .cu__card-row { display:flex; align-items:flex-start; gap:12px; }
+    .cu__info { flex:1; min-width:0; }
+    .cu__name { font-family:'${fp.display}',serif; font-size:16px; font-weight:700; color:${t.textColor}; line-height:1.2; margin-bottom:4px; }
+    .cu__price { font-size:13px; color:${t.accentColor}; font-weight:600; }
+    .cu__subtotal { font-family:'${fp.display}',serif; font-size:17px; font-weight:700; color:${t.textColor}; white-space:nowrap; }
+    .cu__right { display:flex; flex-direction:column; align-items:flex-end; gap:10px; }
+    .cu__counter { display:flex; align-items:center; gap:3px; background:${surface2}; border:1px solid ${borderCol}; border-radius:100px; padding:3px; }
+    .cu__cbtn { width:28px; height:28px; border-radius:50%; background:${t.accentColor}; color:${t.bgColor}; border:none; cursor:pointer; font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:center; transition:opacity .15s,transform .1s; line-height:1; }
+    .cu__cbtn:active { transform:scale(.9); }
+    .cu__cbtn.cu__minus { background:${surface3}; border:1px solid ${borderCol}; color:${mutedText}; }
+    .cu__cnum { min-width:22px; text-align:center; font-size:13px; font-weight:700; color:${t.textColor}; }
+    .cu__si-btn { display:flex; align-items:center; gap:6px; font-size:12px; color:${dimText}; cursor:pointer; background:none; border:none; padding:0; margin-top:10px; padding-top:10px; border-top:1px solid ${borderCol}; width:100%; text-align:left; transition:color .2s; font-family:'${fp.body}',sans-serif; }
+    .cu__si-btn:hover { color:${t.accentColor}; }
+    .cu__si-filled { color:${hexA(t.accentColor,0.8)}; font-style:italic; }
+    .cu__si-area { width:100%; margin-top:10px; padding-top:10px; border-top:1px solid ${borderCol}; }
+    .cu__si-area textarea { width:100%; background:${surface2}; border:1px solid ${borderCol}; color:${t.textColor}; border-radius:10px; padding:10px 12px; font-size:12px; font-family:'${fp.body}',sans-serif; resize:none; outline:none; transition:border-color .2s; }
+    .cu__si-area textarea:focus { border-color:${hexA(t.accentColor,0.6)}; }
+    .cu__si-area textarea::placeholder { color:${dimText}; }
+    .cu__si-done { font-size:12px; color:${t.accentColor}; font-weight:600; cursor:pointer; background:none; border:none; margin-top:8px; padding:0; font-family:'${fp.body}',sans-serif; }
+    .cu__divider { height:1px; background:${borderCol}; margin:20px 0; }
+    .cu__bill { background:${t.surfaceColor}; border:1px solid ${borderCol}; border-radius:${t.cardRadius}px; padding:16px; margin-bottom:20px; }
+    .cu__bill-row { display:flex; justify-content:space-between; align-items:center; padding:6px 0; }
+    .cu__bill-lbl { font-size:13px; color:${mutedText}; }
+    .cu__bill-val { font-size:13px; color:${t.textColor}; font-weight:500; }
+    .cu__bill-total-row { display:flex; justify-content:space-between; align-items:center; border-top:1px solid ${borderCol}; margin-top:6px; padding-top:12px; }
+    .cu__bill-total-lbl { font-family:'${fp.display}',serif; font-size:17px; font-weight:700; color:${t.textColor}; }
+    .cu__bill-total-val { font-family:'${fp.display}',serif; font-size:22px; font-weight:900; color:${t.accentColor}; }
+    .cu__rupee { font-family:'${fp.body}',sans-serif; font-weight:600; font-size:0.82em; vertical-align:baseline; letter-spacing:0; }
+    .cu__pay-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:20px; }
+    .cu__pay-opt { background:${t.surfaceColor}; border:1px solid ${borderCol}; border-radius:${t.cardRadius}px; padding:14px 12px; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:6px; transition:all .2s; font-family:'${fp.body}',sans-serif; }
+    .cu__pay-opt:hover { border-color:${hexA(t.textColor,dark?0.15:0.18)}; }
+    .cu__pay-opt.cu__sel { border-color:${t.accentColor}; background:${a12}; }
+    .cu__pay-icon { font-size:24px; }
+    .cu__pay-name { font-size:13px; font-weight:600; color:${t.textColor}; }
+    .cu__pay-sub { font-size:11px; color:${mutedText}; }
+    .cu__upi-box { background:${hexA(t.accentColor,0.06)}; border:1px solid ${a25}; border-radius:${t.cardRadius}px; padding:20px; text-align:center; margin-bottom:16px; }
+    .cu__upi-qr { background:#fff; border-radius:12px; padding:12px; display:inline-block; margin-bottom:12px; }
+    .cu__upi-lbl { font-size:12px; color:${mutedText}; margin-bottom:12px; }
+    .cu__upi-btn { display:flex; align-items:center; justify-content:center; gap:6px; width:100%; background:${t.accentColor}; color:${t.bgColor}; border:none; border-radius:${t.buttonRadius}px; padding:10px; font-size:13px; font-weight:600; cursor:pointer; text-decoration:none; font-family:'${fp.body}',sans-serif; transition:opacity .2s; }
+    .cu__upi-btn:hover { opacity:.85; }
+    .cu__cash-box { background:rgba(76,175,80,.08); border:1px solid rgba(76,175,80,.25); border-radius:${t.cardRadius}px; padding:16px; margin-bottom:16px; }
+    .cu__cash-amount { font-family:'${fp.display}',serif; font-size:28px; font-weight:900; color:#4caf50; margin-bottom:4px; }
+    .cu__cash-sub { font-size:12px; color:${mutedText}; }
+    .cu__place { width:100%; background:${btnBg}; color:${btnColor}; border:${btnBorder}; border-radius:${t.buttonRadius}px; padding:16px; font-size:16px; font-weight:700; cursor:pointer; font-family:'${fp.body}',sans-serif; display:flex; align-items:center; justify-content:center; gap:8px; transition:opacity .2s,transform .2s,box-shadow .2s; box-shadow:0 6px 24px ${a35}; }
+    .cu__place:hover:not(:disabled) { opacity:.88; transform:translateY(-2px); box-shadow:0 10px 32px ${a35}; }
+    .cu__place:disabled { opacity:.5; cursor:not-allowed; }
+    @keyframes cu__spin { to { transform:rotate(360deg); } }
+    .cu__spin { animation:cu__spin .8s linear infinite; }
+    .cu__empty { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:70vh; text-align:center; padding:40px; }
+    .cu__empty-icon { width:80px; height:80px; border-radius:50%; background:${surface2}; border:1px solid ${borderCol}; display:flex; align-items:center; justify-content:center; font-size:36px; margin-bottom:24px; }
+    .cu__empty-title { font-family:'${fp.display}',serif; font-size:24px; font-weight:700; color:${t.textColor}; margin-bottom:8px; }
+    .cu__empty-sub { font-size:14px; color:${mutedText}; margin-bottom:24px; }
+    .cu__empty-btn { display:inline-flex; align-items:center; gap:6px; background:${btnBg}; color:${btnColor}; border:${btnBorder}; border-radius:${t.buttonRadius}px; padding:12px 24px; font-size:14px; font-weight:700; cursor:pointer; font-family:'${fp.body}',sans-serif; transition:opacity .2s; }
+    .cu__empty-btn:hover { opacity:.85; }
+    .cu__success-hero { background:linear-gradient(165deg,${hexA(t.accentColor,0.07)} 0%,${t.bgColor} 60%); padding:40px 20px 32px; text-align:center; border-bottom:1px solid ${borderCol}; }
+    .cu__success-circle { width:72px; height:72px; border-radius:50%; background:rgba(76,175,80,.1); border:2px solid rgba(76,175,80,.3); display:flex; align-items:center; justify-content:center; margin:0 auto 16px; font-size:32px; color:#4caf50; }
+    .cu__success-title { font-family:'${fp.display}',serif; font-size:26px; font-weight:900; color:${t.textColor}; margin-bottom:6px; }
+    .cu__success-sub { font-size:13px; color:${mutedText}; }
+    .cu__track-box { background:${t.surfaceColor}; border:1px solid ${borderCol}; border-radius:${t.cardRadius}px; padding:20px; margin-bottom:16px; }
+    .cu__track-lbl { font-size:11px; color:${dimText}; text-transform:uppercase; letter-spacing:1px; margin-bottom:12px; text-align:center; display:block; }
+    .cu__track-qr { background:#fff; border-radius:12px; padding:12px; display:inline-block; margin-bottom:16px; }
+    .cu__track-link-box { background:${surface2}; border:1px solid ${borderCol}; border-radius:10px; padding:10px 12px; margin-bottom:16px; }
+    .cu__track-link-lbl { font-size:10px; color:${dimText}; margin-bottom:4px; display:block; }
+    .cu__track-link { font-size:12px; color:${t.accentColor}; word-break:break-all; }
+    .cu__action-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px; }
+    .cu__action-btn { display:flex; align-items:center; justify-content:center; gap:6px; border:1px solid ${borderCol}; background:${surface2}; color:${t.textColor}; border-radius:${t.cardRadius}px; padding:12px; font-size:13px; font-weight:600; cursor:pointer; font-family:'${fp.body}',sans-serif; transition:all .2s; text-decoration:none; }
+    .cu__action-btn:hover { border-color:${t.accentColor}; color:${t.accentColor}; }
+    .cu__action-btn.cu__primary { background:${t.accentColor}; color:${t.bgColor}; border-color:${t.accentColor}; }
+    .cu__action-btn.cu__primary:hover { opacity:.88; }
+    .cu__tip { background:${a12}; border:1px solid ${a25}; border-radius:${t.cardRadius}px; padding:12px 14px; display:flex; align-items:flex-start; gap:8px; }
+    .cu__tip-text { font-size:12px; color:${mutedText}; line-height:1.5; }
+  `;
 
   const handleInstructionChange = (itemId: string, value: string) => {
-    setSpecialInstructions(prev => ({
-      ...prev,
-      [itemId]: value
-    }));
+    setSpecialInstructions((prev) => ({ ...prev, [itemId]: value }));
   };
 
-const handlePlaceOrder = async () => {
-  setIsProcessing(true);
+  const handlePlaceOrder = async () => {
+    setIsProcessing(true);
+    try {
+      const sessionToken = sessionStorage.getItem("order_session");
+      if (!sessionToken) { alert("Session not found. Please refresh and try again."); setIsProcessing(false); return; }
 
-  try {
-    const sessionToken = sessionStorage.getItem("order_session");
+      const { data: existingSession, error: sessionError } = await supabase
+        .from("order_sessions").select("id, restaurant_id, table_id")
+        .eq("session_token", sessionToken).single();
 
-    if (!sessionToken) {
-      alert("Session not found. Please refresh and try again.");
-      setIsProcessing(false);
-      return;
-    }
+      if (sessionError || !existingSession) { alert("Session expired. Please scan the QR code again."); setIsProcessing(false); return; }
 
-    const { data: existingSession, error: sessionError } = await supabase
-      .from("order_sessions")
-      .select("id, restaurant_id, table_id")
-      .eq("session_token", sessionToken)
-      .single();
+      if (existingSession.restaurant_id !== restaurant.id) {
+        alert("Session mismatch. Please scan the QR code again.");
+        sessionStorage.removeItem("order_session"); sessionStorage.removeItem("session_restaurant_id");
+        dispatch(clearCart()); setIsProcessing(false); return;
+      }
 
-    if (sessionError || !existingSession) {
-      alert("Session expired. Please scan the QR code again.");
-      setIsProcessing(false);
-      return;
-    }
+      let tableNumber = null;
+      if (existingSession.table_id) {
+        const { data: tableData } = await supabase.from("tables").select("table_number").eq("id", existingSession.table_id).single();
+        tableNumber = tableData?.table_number || null;
+      }
 
-    // ── SECURITY FIX: verify session belongs to THIS restaurant ──
-    if (existingSession.restaurant_id !== restaurant.id) {
-      alert("Session mismatch. Please scan the QR code again.");
-      // Clear the bad session
-      sessionStorage.removeItem("order_session");
-      sessionStorage.removeItem("session_restaurant_id");
-      dispatch(clearCart());
-      setIsProcessing(false);
-      return;
-    }
+      const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
 
-    let tableNumber = null;
-    if (existingSession.table_id) {
-      const { data: tableData } = await supabase
-        .from("tables")
-        .select("table_number")
-        .eq("id", existingSession.table_id)
-        .single();
-
-      tableNumber = tableData?.table_number || null;
-    }
-
-    const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-
-    const { data: order, error: orderError } = await supabase
-      .from("orders")
-      .insert({
+      const { data: order, error: orderError } = await supabase.from("orders").insert({
         session_id: existingSession.id,
-        restaurant_id: existingSession.restaurant_id,  // ← from DB, not client
+        restaurant_id: existingSession.restaurant_id,
         table_id: existingSession.table_id,
         order_number: orderNumber,
         table_number: tableNumber || 0,
-        subtotal,
-        tax,
+        subtotal, tax,
         service_charge: serviceCharge,
         total,
         payment_method: paymentMethod,
         payment_status: paymentMethod === "upi" ? "paid" : "pending",
         status: paymentMethod === "upi" ? "confirmed" : "pending",
-      })
-      .select()
-      .single();
+      }).select().single();
 
-    if (orderError) {
-      console.error("Order creation error:", orderError);
-      alert(`Failed to create order: ${orderError.message}`);
-      setIsProcessing(false);
-      return;
-    }
+      if (orderError || !order) { alert(`Failed to create order: ${orderError?.message}`); setIsProcessing(false); return; }
 
-    if (!order) {
-      alert("Failed to create order: No data returned");
-      setIsProcessing(false);
-      return;
-    }
+      const items = cart.items.map((item) => ({
+        order_id: order.id, menu_item_id: item.id, quantity: item.quantity,
+        price_at_time: item.price, price: item.price, name: item.name,
+        special_instructions: specialInstructions[item.id] || null,
+      }));
 
-    const items = cart.items.map((item) => ({
-      order_id: order.id,
-      menu_item_id: item.id,
-      quantity: item.quantity,
-      price_at_time: item.price,
-      price: item.price,
-      name: item.name,
-      special_instructions: specialInstructions[item.id] || null,
-    }));
+      const { error: itemsError } = await supabase.from("order_items").insert(items);
+      if (itemsError) { alert(`Failed to add items: ${itemsError.message}`); setIsProcessing(false); return; }
 
-    const { error: itemsError } = await supabase
-      .from("order_items")
-      .insert(items);
+      await supabase.from("order_status_history").insert({
+        order_id: order.id, status: paymentMethod === "upi" ? "confirmed" : "pending",
+      });
 
-    if (itemsError) {
-      console.error("Order items error:", itemsError);
-      alert(`Failed to add items: ${itemsError.message}`);
-      setIsProcessing(false);
-      return;
-    }
+      const link = `${window.location.origin}/order/${order.id}`;
+      setOrderLink(link); setPaymentMarked(true);
+      dispatch(clearCart()); deleteCartFromSupabase();
+    } catch (err) {
+      console.error("Unexpected error:", err);
+      alert("An unexpected error occurred. Please try again.");
+    } finally { setIsProcessing(false); }
+  };
 
-    await supabase.from("order_status_history").insert({
-      order_id: order.id,
-      status: paymentMethod === "upi" ? "confirmed" : "pending",
-    });
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(orderLink);
+    setCopied(true); setTimeout(() => setCopied(false), 2000);
+  };
 
-    const link = `${window.location.origin}/order/${order.id}`;
-    setOrderLink(link);
-    setPaymentMarked(true);
-
-    dispatch(clearCart());
-    deleteCartFromSupabase();
-    setIsProcessing(false);
-  } catch (err) {
-    console.error("Unexpected error:", err);
-    alert("An unexpected error occurred. Please try again.");
-    setIsProcessing(false);
-  }
-};
-
-  // Empty cart state
+  // ── EMPTY STATE ────────────────────────────────────────────
   if (!cart.items.length && !paymentMarked) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-50">
-        <div className="bg-gradient-to-r from-orange-600 to-orange-700 text-white">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-            <button
-              onClick={() => router.back()}
-              className="flex items-center gap-2 text-orange-100 hover:text-white mb-4"
-            >
-              <ArrowLeft size={20} />
-              Back to Menu
-            </button>
-            <h1 className="text-3xl sm:text-4xl font-bold">Your Cart</h1>
+      <><style>{css}</style>
+        <div className="cu__root">
+          <div className="cu__header">
+            <button className="cu__back" onClick={() => router.back()}><ArrowLeft size={15} /> Back to Menu</button>
+          </div>
+          <div className="cu__empty">
+            <div className="cu__empty-icon">🛒</div>
+            <h2 className="cu__empty-title">Your cart is empty</h2>
+            <p className="cu__empty-sub">Add something delicious from the menu</p>
+            <button className="cu__empty-btn" onClick={() => router.back()}><ArrowLeft size={15} /> Browse Menu</button>
           </div>
         </div>
-
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-          <div className="text-center py-16 bg-white rounded-2xl shadow-sm">
-            <ShoppingCart size={64} className="mx-auto text-gray-300 mb-4" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Your cart is empty</h2>
-            <p className="text-gray-600 mb-6">Add some delicious items from the menu!</p>
-            <button
-              onClick={() => router.back()}
-              className="px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-semibold"
-            >
-              Browse Menu
-            </button>
-          </div>
-        </div>
-      </div>
+      </>
     );
   }
 
-  // Success screen
+  // ── SUCCESS STATE ──────────────────────────────────────────
   if (paymentMarked && orderLink) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-50">
-        <div className="bg-gradient-to-r from-green-600 to-green-700 text-white">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-            <h1 className="text-3xl sm:text-4xl font-bold">Order Confirmed!</h1>
+      <><style>{css}</style>
+        <div className="cu__root">
+          <div className="cu__success-hero">
+            <div className="cu__success-circle">✓</div>
+            <h1 className="cu__success-title">Order Confirmed!</h1>
+            <p className="cu__success-sub">Your order is being prepared</p>
           </div>
-        </div>
-
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-4">
-          <div className="p-6 bg-green-100 border-2 border-green-500 rounded-2xl text-center">
-            <p className="text-4xl mb-3">✅</p>
-            <h2 className="text-2xl font-bold text-green-700 mb-2">
-              Order Placed Successfully!
-            </h2>
-            <p className="text-green-600">Your order is being prepared</p>
-          </div>
-
-          <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-200">
-            <h3 className="font-semibold text-lg mb-4 text-center">
-              📱 Track Your Order
-            </h3>
-
-            <div className="flex justify-center mb-4">
-              <div className="bg-white p-4 rounded-lg border-2 border-gray-200">
-                <QRCodeSVG value={orderLink} size={180} />
+          <div className="cu__body">
+            <div className="cu__track-box">
+              <span className="cu__track-lbl">Track your order</span>
+              <div style={{ textAlign: "center" }}>
+                <div className="cu__track-qr"><QRCodeSVG value={orderLink} size={160} /></div>
               </div>
-            </div>
-
-            <p className="text-sm text-gray-600 text-center mb-4">
-              Scan this QR code or save the link below to track from any device
-            </p>
-
-            <div className="bg-gray-50 p-4 rounded-lg border border-gray-300 mb-4">
-              <p className="text-xs text-gray-500 mb-2">Your tracking link:</p>
-              <p className="font-mono text-sm break-all text-blue-600">
-                {orderLink}
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(orderLink);
-                  alert("Link copied! 📋");
-                }}
-                className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 font-medium"
-              >
-                📋 Copy Link
-              </button>
-
-              <button
-                onClick={() => {
-                  if (navigator.share) {
-                    navigator.share({
-                      title: "Track My Order",
-                      text: "Track my restaurant order",
-                      url: orderLink,
-                    });
-                  }
-                }}
-                className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 font-medium"
-              >
-                📤 Share Link
-              </button>
-
-              <a
-                href={`/orders`}
-                className="block w-full bg-orange-600 text-white py-3 rounded-lg hover:bg-orange-700 font-medium text-center"
-              >
-                👀 View Order Status
+              <div className="cu__track-link-box">
+                <span className="cu__track-link-lbl">Order tracking link</span>
+                <p className="cu__track-link">{orderLink}</p>
+              </div>
+              <div className="cu__action-row">
+                <button className="cu__action-btn" onClick={handleCopy}>
+                  {copied ? <Check size={15} /> : <Copy size={15} />} {copied ? "Copied!" : "Copy Link"}
+                </button>
+                <button className="cu__action-btn" onClick={() => navigator.share?.({ title: "Track My Order", url: orderLink })}>
+                  <Share2 size={15} /> Share
+                </button>
+              </div>
+              <a href="/orders" className="cu__action-btn cu__primary" style={{ marginTop: 0 }}>
+                <ExternalLink size={15} /> View Order Status
               </a>
             </div>
-          </div>
-
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <p className="text-sm text-yellow-800">
-              💡 <strong>Tip:</strong> Bookmark this link or take a screenshot to
-              track your order from any device!
-            </p>
+            <div className="cu__tip">
+              <span style={{ fontSize: 14 }}>💡</span>
+              <p className="cu__tip-text">Bookmark or screenshot this link to track your order from any device.</p>
+            </div>
           </div>
         </div>
-      </div>
+      </>
     );
   }
 
-  // Cart view
+  // ── MAIN CART VIEW ─────────────────────────────────────────
+  const totalItems = cart.items.reduce((s, i) => s + i.quantity, 0);
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-50">
-      <div className="bg-gradient-to-r from-orange-600 to-orange-700 text-white sticky top-0 z-40">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <button
-            onClick={() => router.back()}
-            className="flex items-center gap-2 text-orange-100 hover:text-white mb-4 transition-colors"
-          >
-            <ArrowLeft size={20} />
-            Back to Menu
-          </button>
-          <h1 className="text-3xl sm:text-4xl font-bold mb-2">Your Cart</h1>
-          <p className="text-orange-100">{cart.items.length} {cart.items.length === 1 ? 'item' : 'items'}</p>
-        </div>
-      </div>
+    <><style>{css}</style>
+      <div className="cu__root">
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid lg:grid-cols-3 gap-8">
-          {/* Cart Items */}
-          <div className="lg:col-span-2 space-y-4">
-            {cart.items.map((item) => (
-              <div
-                key={item.id}
-                className="bg-white border border-gray-200 rounded-2xl p-5 hover:shadow-md transition-shadow"
-              >
-                <div className="flex justify-between items-start gap-4 mb-3">
-                  <div className="flex-1">
-                    <h3 className="text-lg font-bold text-gray-900">{item.name}</h3>
-                    <p className="text-orange-600 font-semibold mt-1">
-                      ₹{item.price.toFixed(2)}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
-                      <button
-                        onClick={() => handleDecrease(item.id)}
-                        className="p-2 text-gray-700 hover:bg-gray-200 rounded-md transition-colors"
-                      >
-                        <Minus size={18} />
-                      </button>
-                      <span className="w-8 text-center font-bold">{item.quantity}</span>
-                      <button
-                        onClick={() => handleIncrease(item.id)}
-                        className="p-2 text-gray-700 hover:bg-gray-200 rounded-md transition-colors"
-                      >
-                        <Plus size={18} />
-                      </button>
-                    </div>
-
-                    <div className="text-right">
-                      <p className="font-bold text-gray-900">
-                        ₹{(item.price * item.quantity).toFixed(2)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Special Instructions */}
-                <div className="mt-3 pt-3 border-t border-gray-100">
-                  {editingItemId === item.id ? (
-                    <div className="space-y-2">
-                      <textarea
-                        value={specialInstructions[item.id] || ""}
-                        onChange={(e) => handleInstructionChange(item.id, e.target.value)}
-                        placeholder="e.g., No onions, extra spicy, well done..."
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                        rows={2}
-                        autoFocus
-                      />
-                      <button
-                        onClick={() => setEditingItemId(null)}
-                        className="text-sm text-orange-600 hover:text-orange-700 font-medium"
-                      >
-                        Done
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setEditingItemId(item.id)}
-                      className="flex items-center gap-2 text-sm text-gray-600 hover:text-orange-600 transition-colors"
-                    >
-                      <Edit3 size={14} />
-                      {specialInstructions[item.id] ? (
-                        <span className="text-orange-600 font-medium">
-                          "{specialInstructions[item.id]}"
-                        </span>
-                      ) : (
-                        <span>Add special instructions</span>
-                      )}
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
+        <div className="cu__header">
+          <button className="cu__back" onClick={() => router.back()}><ArrowLeft size={15} /> Back to Menu</button>
+          <div className="cu__header-row">
+            <h1 className="cu__title">Your Order</h1>
+            <p className="cu__count">{totalItems} {totalItems === 1 ? "item" : "items"}</p>
           </div>
+        </div>
 
-          {/* Order Summary - Same as before */}
-          <div className="lg:col-span-1">
-            <div className="bg-white border border-gray-200 rounded-2xl p-6 sticky top-24">
-              <h2 className="text-xl font-bold mb-4">Order Summary</h2>
-
-              <div className="space-y-3 mb-4 pb-4 border-b">
-                <div className="flex justify-between text-gray-600">
-                  <span>Subtotal:</span>
-                  <span>₹{subtotal.toFixed(2)}</span>
+        <div className="cu__body">
+          <span className="cu__slbl">Items</span>
+          {cart.items.map((item) => (
+            <div key={item.id} className="cu__card">
+              <div className="cu__card-row">
+                <div className="cu__info">
+                  <h3 className="cu__name">{item.name}</h3>
+                  <p className="cu__price"><span className="cu__rupee">₹</span>{item.price.toFixed(0)} each</p>
                 </div>
-                <div className="flex justify-between text-gray-600">
-                  <span>Tax (5%):</span>
-                  <span>₹{tax.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-gray-600">
-                  <span>Service (10%):</span>
-                  <span>₹{serviceCharge.toFixed(2)}</span>
-                </div>
-              </div>
-
-              <div className="flex justify-between text-xl font-bold mb-6">
-                <span>Total:</span>
-                <span className="text-orange-600">₹{total.toFixed(2)}</span>
-              </div>
-
-              <h3 className="font-semibold mb-3">Payment Method</h3>
-              <div className="flex gap-3 mb-6">
-                <button
-                  onClick={() => setPaymentMethod("upi")}
-                  disabled={!restaurant.upi_id}
-                  className={`flex-1 px-4 py-3 rounded-lg border-2 font-medium transition-all ${
-                    paymentMethod === "upi"
-                      ? "bg-orange-600 text-white border-orange-600"
-                      : "bg-white text-gray-700 border-gray-300 hover:border-orange-400"
-                  } ${!restaurant.upi_id ? "opacity-50 cursor-not-allowed" : ""}`}
-                >
-                  💳 UPI
-                </button>
-                <button
-                  onClick={() => setPaymentMethod("cash")}
-                  className={`flex-1 px-4 py-3 rounded-lg border-2 font-medium transition-all ${
-                    paymentMethod === "cash"
-                      ? "bg-orange-600 text-white border-orange-600"
-                      : "bg-white text-gray-700 border-gray-300 hover:border-orange-400"
-                  }`}
-                >
-                  💵 Cash
-                </button>
-              </div>
-
-              {paymentMethod === "upi" && restaurant.upi_id && (
-                <div className="mb-6 p-4 bg-blue-50 rounded-xl border border-blue-200">
-                  <div className="flex justify-center mb-3">
-                    <QRCodeSVG value={upiLink} size={150} />
+                <div className="cu__right">
+                  <p className="cu__subtotal"><span className="cu__rupee">₹</span>{(item.price * item.quantity).toFixed(0)}</p>
+                  <div className="cu__counter">
+                    <button className="cu__cbtn cu__minus" onClick={() => {
+                      if (item.quantity === 1) {
+                        if (confirm("Remove this item from cart?")) {
+                          dispatch(decreaseItem(item.id));
+                          const n = { ...specialInstructions }; delete n[item.id]; setSpecialInstructions(n);
+                        }
+                      } else { dispatch(decreaseItem(item.id)); }
+                    }}>−</button>
+                    <span className="cu__cnum">{item.quantity}</span>
+                    <button className="cu__cbtn" onClick={() => dispatch(addItem({ ...item, quantity: 1 }))}>+</button>
                   </div>
-                  <p className="text-sm text-gray-600 text-center mb-2">
-                    Scan QR with any UPI app
-                  </p>
-                  <a
-                    href={upiLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block w-full text-center bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 text-sm font-medium"
-                  >
-                    Open UPI App
-                  </a>
                 </div>
-              )}
-
-              {paymentMethod === "cash" && (
-                <div className="mb-6 p-4 bg-green-50 rounded-xl border border-green-200">
-                  <p className="text-sm text-gray-700">
-                    Pay ₹{total.toFixed(2)} at the counter when picking up your order.
-                  </p>
+              </div>
+              {editingItemId === item.id ? (
+                <div className="cu__si-area">
+                  <textarea rows={2} autoFocus value={specialInstructions[item.id] || ""}
+                    onChange={(e) => handleInstructionChange(item.id, e.target.value)}
+                    placeholder="e.g. No onions, extra spicy, less oil…" />
+                  <button className="cu__si-done" onClick={() => setEditingItemId(null)}>✓ Done</button>
                 </div>
+              ) : (
+                <button className="cu__si-btn" onClick={() => setEditingItemId(item.id)}>
+                  <Edit3 size={12} />
+                  {specialInstructions[item.id]
+                    ? <span className="cu__si-filled">"{specialInstructions[item.id]}"</span>
+                    : <span>Add special instructions</span>}
+                </button>
               )}
+            </div>
+          ))}
 
-              <button
-                onClick={handlePlaceOrder}
-                disabled={isProcessing || (paymentMethod === "upi" && !restaurant.upi_id)}
-                className="w-full bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:-translate-y-0.5 shadow-lg"
-              >
-                {isProcessing ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                        fill="none"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
-                    Processing...
-                  </span>
-                ) : paymentMethod === "upi" ? (
-                  "✓ I Paid - Confirm Order"
-                ) : (
-                  "Place Order"
-                )}
-              </button>
+          <div className="cu__divider" />
+
+          <span className="cu__slbl">Bill Summary</span>
+          <div className="cu__bill">
+            <div className="cu__bill-row">
+              <span className="cu__bill-lbl">Subtotal</span>
+              <span className="cu__bill-val"><span className="cu__rupee">₹</span>{subtotal.toFixed(0)}</span>
+            </div>
+            {/* Only render rows when the restaurant has configured a non-zero rate */}
+            {taxRate > 0 && (
+              <div className="cu__bill-row">
+                <span className="cu__bill-lbl">GST ({restaurant.tax_percent}%)</span>
+                <span className="cu__bill-val"><span className="cu__rupee">₹</span>{tax.toFixed(0)}</span>
+              </div>
+            )}
+            {serviceChargeRate > 0 && (
+              <div className="cu__bill-row">
+                <span className="cu__bill-lbl">Service Charge ({restaurant.service_charge_percent}%)</span>
+                <span className="cu__bill-val"><span className="cu__rupee">₹</span>{serviceCharge.toFixed(0)}</span>
+              </div>
+            )}
+            <div className="cu__bill-total-row">
+              <span className="cu__bill-total-lbl">Total</span>
+              <span className="cu__bill-total-val">
+                <span className="cu__rupee" style={{ fontSize: "0.75em" }}>₹</span>{total.toFixed(0)}
+              </span>
             </div>
           </div>
+
+          <div className="cu__divider" />
+
+          <span className="cu__slbl">Payment Method</span>
+          <div className="cu__pay-grid">
+            <button className={`cu__pay-opt ${paymentMethod === "upi" ? "cu__sel" : ""}`}
+              onClick={() => setPaymentMethod("upi")} disabled={!restaurant.upi_id}
+              style={!restaurant.upi_id ? { opacity: 0.4, cursor: "not-allowed" } : {}}>
+              <span className="cu__pay-icon">📱</span>
+              <span className="cu__pay-name">UPI</span>
+              <span className="cu__pay-sub">Pay instantly</span>
+            </button>
+            <button className={`cu__pay-opt ${paymentMethod === "cash" ? "cu__sel" : ""}`}
+              onClick={() => setPaymentMethod("cash")}>
+              <span className="cu__pay-icon">💵</span>
+              <span className="cu__pay-name">Cash</span>
+              <span className="cu__pay-sub">Pay at counter</span>
+            </button>
+          </div>
+
+          {paymentMethod === "upi" && restaurant.upi_id && (
+            <div className="cu__upi-box">
+              <div className="cu__upi-qr"><QRCodeSVG value={upiLink} size={150} /></div>
+              <p className="cu__upi-lbl">Scan with any UPI app to pay <span className="cu__rupee">₹</span>{total.toFixed(0)}</p>
+              <a href={upiLink} className="cu__upi-btn"><Smartphone size={14} /> Open UPI App</a>
+            </div>
+          )}
+
+          {paymentMethod === "cash" && (
+            <div className="cu__cash-box">
+              <p className="cu__cash-sub" style={{ marginBottom: 4 }}>Amount to pay at counter</p>
+              <p className="cu__cash-amount">
+                <span className="cu__rupee" style={{ fontSize: "0.72em", fontWeight: 700 }}>₹</span>{total.toFixed(0)}
+              </p>
+              <p className="cu__cash-sub">Our staff will collect payment when your order is ready</p>
+            </div>
+          )}
+
+          <button className="cu__place" onClick={handlePlaceOrder}
+            disabled={isProcessing || (paymentMethod === "upi" && !restaurant.upi_id)}>
+            {isProcessing ? (
+              <><svg className="cu__spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <circle cx="12" cy="12" r="10" strokeOpacity=".25" /><path d="M12 2a10 10 0 0 1 10 10" />
+              </svg>Processing…</>
+            ) : paymentMethod === "upi" ? (
+              <><Check size={18} strokeWidth={2.5} /> I've Paid — Confirm Order</>
+            ) : (
+              <><ChevronRight size={18} strokeWidth={2.5} /> Place Order</>
+            )}
+          </button>
         </div>
       </div>
-    </div>
+    </>
   );
 }

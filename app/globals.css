@@ -52,3 +52,9 @@ textarea::placeholder {
     color: #9ca3af !important;
   }
 }
+.rupee {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 600;
+  font-size: 0.82em;
+  letter-spacing: 0;
+}

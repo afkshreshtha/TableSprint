@@ -316,27 +316,7 @@ export default function SettingsPage() {
                 </p>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  UPI QR Code (Optional)
-                </label>
-                <div className="flex items-center space-x-4">
-                  {restaurant?.upi_qr_url && (
-                    <img
-                      src={restaurant.upi_qr_url}
-                      alt="UPI QR"
-                      className="w-24 h-24 object-cover rounded-lg border border-gray-300"
-                    />
-                  )}
-                  <button
-                    type="button"
-                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center space-x-2"
-                  >
-                    <Upload className="w-4 h-4" />
-                    <span>Upload QR Code</span>
-                  </button>
-                </div>
-              </div>
+
             </div>
           </div>
 

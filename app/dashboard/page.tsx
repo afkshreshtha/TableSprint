@@ -1,32 +1,83 @@
-'use client';
+"use client";
 
-import { useEffect, useState, useCallback } from 'react';
-import DashboardLayout from '@/components/dashboard/DashboardLayout';
-import ProtectedRoute from '@/lib/utils/protectedRoute';
+import { useEffect, useState, useCallback } from "react";
+import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import ProtectedRoute from "@/lib/utils/protectedRoute";
 import {
-  ShoppingBag, DollarSign, Clock, TrendingUp, UtensilsCrossed,
-  ArrowUpRight, ArrowDownRight, Calendar, Lock, Zap, Flame,
-  BarChart3, Activity, Star, ChevronRight,
-} from 'lucide-react';
-import Link from 'next/link';
-import { supabase } from '@/lib/supabase/client';
+  ShoppingBag,
+  DollarSign,
+  TrendingUp,
+  UtensilsCrossed,
+  ArrowUpRight,
+  ArrowDownRight,
+  Calendar,
+  Lock,
+  Zap,
+  Flame,
+  BarChart3,
+  ChefHat,
+  ChevronRight,
+  Star,
+  Activity,
+} from "lucide-react";
+import Link from "next/link";
+import { supabase } from "@/lib/supabase/client";
 import {
-  LineChart, Line, AreaChart, Area, BarChart, Bar,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, ComposedChart, ReferenceLine,
-} from 'recharts';
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  ComposedChart,
+  Line,
+} from "recharts";
 
-type TimePeriod = '24h' | '7d' | '30d' | '90d' | '1y' | 'all';
+/* ═══════════════════════════════════════════════════════════
+   TYPES
+═══════════════════════════════════════════════════════════ */
+type TimePeriod = "24h" | "7d" | "30d" | "90d" | "1y" | "all";
+
+interface TableRevenue {
+  table_number: number;
+  revenue: number;
+  orders: number;
+}
+interface SlowMover {
+  name: string;
+  count: number;
+  category: string;
+}
+interface CategoryBreakdown {
+  name: string;
+  revenue: number;
+  orders: number;
+}
 
 interface DashboardStats {
   currentOrders: number;
   currentRevenue: number;
   activeOrders: number;
   topItems: Array<{ name: string; count: number }>;
-  trendData: Array<{ label: string; revenue: number; orders: number; avgOrder: number }>;
+  trendData: Array<{
+    label: string;
+    revenue: number;
+    orders: number;
+    avgOrder: number;
+  }>;
   hourlyData: Array<{ hour: string; orders: number; revenue: number }>;
   previousOrders: number;
   previousRevenue: number;
+  cancelledOrders: number;
+  totalAllOrders: number; // ← FIX: hoisted from fetch scope
+  tableRevenue: TableRevenue[];
+  slowMovers: SlowMover[];
+  cancellationRate: number;
+  wowRevenue: { thisWeek: number; lastWeek: number; delta: number };
+  categoryBreakdown: CategoryBreakdown[];
 }
 
 interface RecentOrder {
@@ -38,28 +89,153 @@ interface RecentOrder {
   created_at: string;
 }
 
-/* ─── Custom Tooltip ─── */
+/* ═══════════════════════════════════════════════════════════
+   PERIOD CONFIG
+═══════════════════════════════════════════════════════════ */
+const PERIOD_CFG: Record<
+  TimePeriod,
+  { label: string; days: number; format: string; proOnly: boolean }
+> = {
+  "24h": { label: "24h", days: 1, format: "hour", proOnly: false },
+  "7d": { label: "7d", days: 7, format: "day", proOnly: false },
+  "30d": { label: "30d", days: 30, format: "day", proOnly: true },
+  "90d": { label: "90d", days: 90, format: "week", proOnly: true },
+  "1y": { label: "1yr", days: 365, format: "month", proOnly: true },
+  all: { label: "All", days: 9999, format: "month", proOnly: true },
+};
+
+/* ═══════════════════════════════════════════════════════════
+   HELPERS
+═══════════════════════════════════════════════════════════ */
+const fmt = (n: number) => `₹${n.toLocaleString("en-IN")}`;
+const fmtShort = (n: number) =>
+  n >= 100000
+    ? `₹${(n / 100000).toFixed(1)}L`
+    : n >= 1000
+      ? `₹${(n / 1000).toFixed(1)}k`
+      : `₹${n}`;
+const calcTrend = (cur: number, prev: number) =>
+  prev === 0 ? (cur > 0 ? 100 : 0) : Math.round(((cur - prev) / prev) * 100);
+const formatTime = (d: string) =>
+  new Date(d).toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+const formatLabel = (date: Date, format: string) => {
+  if (format === "hour")
+    return date.toLocaleTimeString("en-IN", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  if (format === "day")
+    return date.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+  if (format === "week") return `Wk${Math.ceil(date.getDate() / 7)}`;
+  if (format === "month")
+    return date.toLocaleDateString("en-IN", {
+      month: "short",
+      year: "2-digit",
+    });
+  return date.toLocaleDateString("en-IN");
+};
+
+const STATUS_META: Record<
+  string,
+  { label: string; dot: string; textColor: string; bg: string }
+> = {
+  pending: {
+    label: "Pending",
+    dot: "#f59e0b",
+    textColor: "#92400e",
+    bg: "#fffbeb",
+  },
+  confirmed: {
+    label: "Confirmed",
+    dot: "#3b82f6",
+    textColor: "#1e40af",
+    bg: "#eff6ff",
+  },
+  preparing: {
+    label: "Preparing",
+    dot: "#8b5cf6",
+    textColor: "#5b21b6",
+    bg: "#f5f3ff",
+  },
+  ready: {
+    label: "Ready",
+    dot: "#10b981",
+    textColor: "#065f46",
+    bg: "#ecfdf5",
+  },
+  served: {
+    label: "Served",
+    dot: "#6b7280",
+    textColor: "#374151",
+    bg: "#f9fafb",
+  },
+  cancelled: {
+    label: "Cancelled",
+    dot: "#ef4444",
+    textColor: "#991b1b",
+    bg: "#fef2f2",
+  },
+};
+
+/* ═══════════════════════════════════════════════════════════
+   CUSTOM TOOLTIP
+═══════════════════════════════════════════════════════════ */
 const ChartTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
   return (
-    <div style={{
-      background: 'rgba(15,15,20,0.95)',
-      border: '1px solid rgba(255,255,255,0.08)',
-      borderRadius: 14,
-      padding: '12px 16px',
-      boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
-      minWidth: 160,
-    }}>
-      <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, marginBottom: 10, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>{label}</p>
+    <div
+      style={{
+        background: "#0f172a",
+        borderRadius: 12,
+        padding: "11px 14px",
+        minWidth: 150,
+        boxShadow: "0 16px 48px rgba(0,0,0,.35)",
+      }}
+    >
+      <p
+        style={{
+          color: "rgba(255,255,255,.4)",
+          fontSize: 10,
+          fontWeight: 700,
+          textTransform: "uppercase",
+          letterSpacing: "0.06em",
+          marginBottom: 8,
+        }}
+      >
+        {label}
+      </p>
       {payload.map((entry: any, idx: number) => (
-        <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 6 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: entry.color, display: 'inline-block' }} />
-            <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>{entry.name}</span>
-          </div>
-          <span style={{ color: '#fff', fontWeight: 700, fontSize: 14 }}>
-            {entry.name.toLowerCase().includes('revenue') || entry.name.toLowerCase().includes('avg')
-              ? `₹${Number(entry.value).toLocaleString('en-IN')}`
+        <div
+          key={idx}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            marginBottom: 5,
+            justifyContent: "space-between",
+          }}
+        >
+          <span
+            style={{
+              width: 7,
+              height: 7,
+              borderRadius: "50%",
+              background: entry.color,
+              flexShrink: 0,
+            }}
+          />
+          <span
+            style={{ color: "rgba(255,255,255,.5)", fontSize: 11, flex: 1 }}
+          >
+            {entry.name}
+          </span>
+          <span style={{ color: "#fff", fontSize: 13, fontWeight: 800 }}>
+            {entry.name.toLowerCase().includes("revenue") ||
+            entry.name.toLowerCase().includes("avg")
+              ? `₹${Number(entry.value).toLocaleString("en-IN")}`
               : entry.value}
           </span>
         </div>
@@ -68,267 +244,799 @@ const ChartTooltip = ({ active, payload, label }: any) => {
   );
 };
 
-/* ─── Stat Card ─── */
-const StatCard = ({ icon, label, value, trend, trendLabel, accent, delay = 0 }: {
-  icon: React.ReactNode; label: string; value: string;
-  trend: number; trendLabel: string; accent: string; delay?: number;
+/* ═══════════════════════════════════════════════════════════
+   STAT CARD
+═══════════════════════════════════════════════════════════ */
+const StatCard = ({
+  icon,
+  label,
+  value,
+  trend,
+  trendLabel,
+  accentColor,
+  sparkData,
+  delay = 0,
+  hideTrend = false,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  trend: number;
+  trendLabel: string;
+  accentColor: string;
+  sparkData?: number[];
+  delay?: number;
+  hideTrend?: boolean;
 }) => {
-  const isPositive = trend >= 0;
+  const isPos = trend >= 0;
+  const spark = (sparkData || []).map((v) => ({ v }));
   return (
-    <div style={{
-      background: '#fff',
-      borderRadius: 20,
-      padding: '24px',
-      border: '1px solid rgba(0,0,0,0.06)',
-      boxShadow: '0 2px 20px rgba(0,0,0,0.04)',
-      transition: 'transform 0.2s, box-shadow 0.2s',
-      animationDelay: `${delay}ms`,
-    }}
-      className="hover:-translate-y-1 hover:shadow-lg"
+    <div
+      style={{
+        background: "#fff",
+        borderRadius: 18,
+        padding: "20px",
+        border: "1px solid rgba(0,0,0,.06)",
+        boxShadow: "0 2px 12px rgba(0,0,0,.04)",
+        transition: "all .2s",
+        animation: `tsFadeUp .4s ease ${delay}ms both`,
+      }}
     >
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
-        <div style={{
-          width: 44, height: 44, borderRadius: 14,
-          background: accent, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          marginBottom: 14,
+        }}
+      >
+        <div
+          style={{
+            width: 42,
+            height: 42,
+            borderRadius: 13,
+            background: `${accentColor}18`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: accentColor,
+          }}
+        >
           {icon}
         </div>
-        <span style={{
-          display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700,
-          padding: '4px 10px', borderRadius: 100,
-          background: isPositive ? '#ecfdf5' : '#fef2f2',
-          color: isPositive ? '#059669' : '#dc2626',
-        }}>
-          {isPositive ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-          {Math.abs(trend)}%
-        </span>
+        {!hideTrend && (
+          <span
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 3,
+              fontSize: 11,
+              fontWeight: 800,
+              padding: "4px 9px",
+              borderRadius: 100,
+              background: isPos ? "#ecfdf5" : "#fef2f2",
+              color: isPos ? "#059669" : "#dc2626",
+            }}
+          >
+            {isPos ? <ArrowUpRight size={11} /> : <ArrowDownRight size={11} />}
+            {Math.abs(trend)}%
+          </span>
+        )}
       </div>
-      <p style={{ fontSize: 13, color: '#9ca3af', marginBottom: 4, fontWeight: 500 }}>{label}</p>
-      <p style={{ fontSize: 28, fontWeight: 800, color: '#111827', lineHeight: 1.1, letterSpacing: '-0.02em' }}>{value}</p>
-      <p style={{ fontSize: 11, color: '#d1d5db', marginTop: 6 }}>{trendLabel}</p>
+      <p
+        style={{
+          fontSize: 12,
+          color: "#94a3b8",
+          fontWeight: 600,
+          marginBottom: 3,
+        }}
+      >
+        {label}
+      </p>
+      <p
+        style={{
+          fontSize: 26,
+          fontWeight: 900,
+          color: "#0f172a",
+          letterSpacing: "-0.04em",
+          lineHeight: 1,
+        }}
+      >
+        {value}
+      </p>
+      <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 5 }}>
+        {trendLabel}
+      </p>
+      {spark.length > 0 && (
+        <div style={{ marginTop: 12, height: 36 }}>
+          <ResponsiveContainer width="100%" height={36}>
+            <AreaChart
+              data={spark}
+              margin={{ top: 2, right: 0, left: 0, bottom: 0 }}
+            >
+              <defs>
+                <linearGradient id={`sp-${label}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={accentColor} stopOpacity={0.3} />
+                  <stop offset="95%" stopColor={accentColor} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <Area
+                type="monotone"
+                dataKey="v"
+                stroke={accentColor}
+                strokeWidth={1.5}
+                fill={`url(#sp-${label})`}
+                dot={false}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      )}
     </div>
   );
 };
 
-/* ─── Pro Blur Overlay ─── */
-const ProBlurOverlay = ({ title, description }: { title: string; description: string }) => (
-  <div style={{
-    position: 'absolute', inset: 0, zIndex: 10,
-    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-    background: 'rgba(255,255,255,0.85)',
-    backdropFilter: 'blur(8px)',
-    borderRadius: 20,
-    padding: 32,
-    textAlign: 'center',
-  }}>
-    <div style={{
-      width: 52, height: 52, borderRadius: 16,
-      background: 'linear-gradient(135deg, #f97316, #ea580c)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      marginBottom: 16, boxShadow: '0 8px 24px rgba(249,115,22,0.3)',
-    }}>
-      <Lock className="w-6 h-6 text-white" />
+/* ═══════════════════════════════════════════════════════════
+   PRO BADGE
+═══════════════════════════════════════════════════════════ */
+const ProBadge = () => (
+  <span
+    style={{
+      fontSize: 9,
+      fontWeight: 800,
+      background: "linear-gradient(135deg,#f97316,#ea580c)",
+      color: "#fff",
+      padding: "2px 7px",
+      borderRadius: 100,
+    }}
+  >
+    PRO
+  </span>
+);
+
+/* ═══════════════════════════════════════════════════════════
+   PRO OVERLAY
+═══════════════════════════════════════════════════════════ */
+const ProOverlay = ({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) => (
+  <div
+    style={{
+      position: "absolute",
+      inset: 0,
+      zIndex: 10,
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      background: "rgba(255,255,255,.9)",
+      backdropFilter: "blur(8px)",
+      borderRadius: 18,
+      padding: 28,
+      textAlign: "center",
+    }}
+  >
+    <div
+      style={{
+        width: 48,
+        height: 48,
+        borderRadius: 14,
+        background: "linear-gradient(135deg,#f97316,#ea580c)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        color: "#fff",
+        marginBottom: 14,
+        boxShadow: "0 8px 24px rgba(249,115,22,.3)",
+      }}
+    >
+      <Lock size={20} />
     </div>
-    <p style={{ fontSize: 16, fontWeight: 800, color: '#111827', marginBottom: 8 }}>{title}</p>
-    <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 20, lineHeight: 1.6 }}>{description}</p>
-    <Link href="/dashboard/pricing" style={{
-      display: 'inline-flex', alignItems: 'center', gap: 8,
-      background: 'linear-gradient(135deg, #f97316, #ea580c)',
-      color: '#fff', padding: '10px 20px', borderRadius: 12,
-      fontSize: 13, fontWeight: 700, textDecoration: 'none',
-      boxShadow: '0 4px 16px rgba(249,115,22,0.35)',
-    }}>
-      <Zap className="w-4 h-4" /> Unlock with Pro
+    <p
+      style={{
+        fontSize: 15,
+        fontWeight: 900,
+        color: "#0f172a",
+        marginBottom: 6,
+      }}
+    >
+      {title}
+    </p>
+    <p
+      style={{
+        fontSize: 12,
+        color: "#475569",
+        marginBottom: 18,
+        lineHeight: 1.6,
+        maxWidth: 220,
+      }}
+    >
+      {description}
+    </p>
+    <Link
+      href="/dashboard/pricing"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        background: "linear-gradient(135deg,#f97316,#ea580c)",
+        color: "#fff",
+        padding: "9px 18px",
+        borderRadius: 10,
+        fontSize: 12,
+        fontWeight: 800,
+        textDecoration: "none",
+        boxShadow: "0 4px 14px rgba(249,115,22,.4)",
+      }}
+    >
+      <Zap size={13} /> Unlock Pro
     </Link>
   </div>
 );
 
-/* ─── Main Component ─── */
+/* ═══════════════════════════════════════════════════════════
+   SKELETON LOADER
+═══════════════════════════════════════════════════════════ */
+const Skeleton = ({
+  w = "100%",
+  h = 16,
+  r = 8,
+}: {
+  w?: string | number;
+  h?: number;
+  r?: number;
+}) => (
+  <div
+    style={{
+      width: w,
+      height: h,
+      borderRadius: r,
+      background: "linear-gradient(90deg,#f1f5f9 25%,#e2e8f0 50%,#f1f5f9 75%)",
+      backgroundSize: "200% 100%",
+      animation: "tsSkeleton 1.4s ease-in-out infinite",
+    }}
+  />
+);
+const SkeletonCard = () => (
+  <div
+    style={{
+      background: "#fff",
+      borderRadius: 18,
+      padding: 20,
+      border: "1px solid rgba(0,0,0,.06)",
+    }}
+  >
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        marginBottom: 14,
+      }}
+    >
+      <Skeleton w={42} h={42} r={13} />
+      <Skeleton w={60} h={24} r={100} />
+    </div>
+    <Skeleton w="60%" h={12} r={6} />
+    <div style={{ marginTop: 8 }}>
+      <Skeleton w="40%" h={26} r={6} />
+    </div>
+    <div style={{ marginTop: 8 }}>
+      <Skeleton w="80%" h={10} r={5} />
+    </div>
+    <div style={{ marginTop: 14 }}>
+      <Skeleton w="100%" h={36} r={6} />
+    </div>
+  </div>
+);
+
+/* ═══════════════════════════════════════════════════════════
+   CARD WRAPPER
+═══════════════════════════════════════════════════════════ */
+const Card = ({
+  children,
+  style = {},
+}: {
+  children: React.ReactNode;
+  style?: React.CSSProperties;
+}) => (
+  <div
+    style={{
+      background: "#fff",
+      borderRadius: 18,
+      border: "1px solid rgba(0,0,0,.06)",
+      boxShadow: "0 2px 12px rgba(0,0,0,.04)",
+      overflow: "hidden",
+      ...style,
+    }}
+  >
+    {children}
+  </div>
+);
+const CardHead = ({ children }: { children: React.ReactNode }) => (
+  <div
+    style={{
+      padding: "16px 20px",
+      borderBottom: "1px solid rgba(0,0,0,.05)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+      flexWrap: "wrap" as const,
+    }}
+  >
+    {children}
+  </div>
+);
+const CardBody = ({
+  children,
+  style = {},
+}: {
+  children: React.ReactNode;
+  style?: React.CSSProperties;
+}) => <div style={{ padding: "16px 20px", ...style }}>{children}</div>;
+
+/* ═══════════════════════════════════════════════════════════
+   EMPTY STATE
+═══════════════════════════════════════════════════════════ */
+const Empty = ({ icon, text }: { icon: React.ReactNode; text: string }) => (
+  <div style={{ padding: "40px 20px", textAlign: "center" }}>
+    <div
+      style={{
+        color: "#e2e8f0",
+        marginBottom: 10,
+        display: "flex",
+        justifyContent: "center",
+      }}
+    >
+      {icon}
+    </div>
+    <p style={{ color: "#94a3b8", fontSize: 13, fontWeight: 600 }}>{text}</p>
+  </div>
+);
+
+/* ═══════════════════════════════════════════════════════════
+   MAIN PAGE
+═══════════════════════════════════════════════════════════ */
 export default function DashboardPage() {
-  const [timePeriod, setTimePeriod] = useState<TimePeriod>('7d');
+  const [timePeriod, setTimePeriod] = useState<TimePeriod>("7d");
   const [isPro, setIsPro] = useState<boolean | null>(null);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
-  const [stats, setStats] = useState<DashboardStats>({
-    currentOrders: 0, currentRevenue: 0, activeOrders: 0,
-    topItems: [], trendData: [], hourlyData: [],
-    previousOrders: 0, previousRevenue: 0,
-  });
-  const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeChart, setActiveChart] = useState<'revenue' | 'orders' | 'both'>('both');
+  const [activeChart, setActiveChart] = useState<"revenue" | "orders" | "both">(
+    "both",
+  );
 
-  const periodConfig: Record<TimePeriod, { label: string; days: number; format: string; proOnly: boolean }> = {
-    '24h': { label: '24h',      days: 1,    format: 'hour',  proOnly: false },
-    '7d':  { label: '7 days',   days: 7,    format: 'day',   proOnly: false },
-    '30d': { label: '30 days',  days: 30,   format: 'day',   proOnly: true  },
-    '90d': { label: '90 days',  days: 90,   format: 'week',  proOnly: true  },
-    '1y':  { label: '1 year',   days: 365,  format: 'month', proOnly: true  },
-    'all': { label: 'All time', days: 9999, format: 'month', proOnly: true  },
+  const EMPTY_STATS: DashboardStats = {
+    currentOrders: 0,
+    currentRevenue: 0,
+    activeOrders: 0,
+    topItems: [],
+    trendData: [],
+    hourlyData: [],
+    previousOrders: 0,
+    previousRevenue: 0,
+    cancelledOrders: 0,
+    totalAllOrders: 0, // ← FIX
+    tableRevenue: [],
+    slowMovers: [],
+    cancellationRate: 0,
+    wowRevenue: { thisWeek: 0, lastWeek: 0, delta: 0 },
+    categoryBreakdown: [],
   };
+  const [stats, setStats] = useState<DashboardStats>(EMPTY_STATS);
+  const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
 
-  const formatLabel = (date: Date, format: string) => {
-    if (format === 'hour') return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-    if (format === 'day') return date.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
-    if (format === 'week') return `Wk ${Math.ceil(date.getDate() / 7)}`;
-    if (format === 'month') return date.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
-    return date.toLocaleDateString('en-IN');
-  };
+  /* ── Data fetch ────────────────────────────────────────── */
+  const fetchDashboardData = useCallback(
+    async (restId: string, period: TimePeriod) => {
+      try {
+        const config = PERIOD_CFG[period];
+        const now = new Date();
+        const periodStart =
+          period === "all"
+            ? new Date("2020-01-01")
+            : (() => {
+                const d = new Date(now);
+                d.setDate(d.getDate() - config.days);
+                d.setHours(0, 0, 0, 0);
+                return d;
+              })();
+        const compareStart = new Date(periodStart);
+        if (period !== "all")
+          compareStart.setDate(compareStart.getDate() - config.days);
 
-  const fetchDashboardData = useCallback(async (restId: string, period: TimePeriod) => {
-    try {
-      const config = periodConfig[period];
-      const now = new Date();
+        const [
+          { data: currentOrders },
+          { data: previousOrders },
+          { data: recent },
+        ] = await Promise.all([
+          supabase
+            .from("orders")
+            .select("id, total, status, created_at")
+            .eq("restaurant_id", restId)
+            .gte("created_at", periodStart.toISOString())
+            .order("created_at", { ascending: true })
+            .neq("status", "cancelled")
+            .eq("payment_status", "paid"),
+          supabase
+            .from("orders")
+            .select("id, total")
+            .eq("restaurant_id", restId)
+            .gte("created_at", compareStart.toISOString())
+            .lt("created_at", periodStart.toISOString()),
+          supabase
+            .from("orders")
+            .select("id, order_number, table_number, status, total, created_at")
+            .eq("restaurant_id", restId)
+            .order("created_at", { ascending: false })
+            .limit(5),
+        ]);
 
-      let periodStart: Date;
-      if (period === 'all') {
-        periodStart = new Date('2020-01-01');
-      } else {
-        periodStart = new Date(now);
-        periodStart.setDate(periodStart.getDate() - config.days);
-        periodStart.setHours(0, 0, 0, 0);
+        // Table revenue
+        const { data: tableOrders } = await supabase
+          .from("orders")
+          .select("table_number, total")
+          .eq("restaurant_id", restId)
+          .gte("created_at", periodStart.toISOString())
+          .neq("status", "cancelled")
+          .eq("payment_status", "paid");
+        const tableMap = new Map<number, { revenue: number; orders: number }>();
+        tableOrders?.forEach((o) => {
+          const tableNum = Number(o.table_number); // ← ADD THIS
+          const e = tableMap.get(tableNum) || { revenue: 0, orders: 0 };
+          tableMap.set(tableNum, {
+            revenue: e.revenue + o.total,
+            orders: e.orders + 1,
+          });
+        });
+        const tableRevenue = Array.from(tableMap.entries())
+          .map(([table_number, v]) => ({
+            table_number: Number(table_number),
+            ...v,
+          })) // ← ensure Number
+
+          .sort((a, b) => b.revenue - a.revenue)
+          .slice(0, 8);
+
+        // Slow movers (last 30 days)
+        const slowPeriodStart = new Date(now);
+        slowPeriodStart.setDate(slowPeriodStart.getDate() - 30);
+        const { data: slowOrds } = await supabase
+          .from("orders")
+          .select("id")
+          .eq("restaurant_id", restId)
+          .gte("created_at", slowPeriodStart.toISOString())
+          .neq("status", "cancelled")
+          .eq("payment_status", "paid");
+
+        let slowMovers: SlowMover[] = [];
+        if ((slowOrds?.length || 0) > 0) {
+          const { data: slowItems } = await supabase
+            .from("order_items")
+            .select("name, quantity, menu_items(categories(name))")
+            .in(
+              "order_id",
+              (slowOrds || []).map((o) => o.id),
+            );
+          const slowMap = new Map<
+            string,
+            { count: number; category: string }
+          >();
+          slowItems?.forEach((item: any) => {
+            const e = slowMap.get(item.name) || {
+              count: 0,
+              category: item.menu_items?.categories?.name || "Uncategorized",
+            };
+            slowMap.set(item.name, {
+              count: e.count + item.quantity,
+              category: e.category,
+            });
+          });
+          const allItems = Array.from(slowMap.entries()).map(([name, v]) => ({
+            name,
+            ...v,
+          }));
+          const avgCount =
+            allItems.reduce((s, i) => s + i.count, 0) / allItems.length;
+
+          slowMovers = allItems
+            .filter((item) => item.count < avgCount * 0.3) // less than 30% of average
+            .sort((a, b) => a.count - b.count)
+            .slice(0, 5);
+        }
+
+        // ── FIX: store cancelledCount + totalAll in state ──────
+        const { data: allPeriodOrders } = await supabase
+          .from("orders")
+          .select("status")
+          .eq("restaurant_id", restId)
+          .gte("created_at", periodStart.toISOString());
+        const totalAllOrders = allPeriodOrders?.length || 0;
+        const cancelledOrders =
+          allPeriodOrders?.filter((o) => o.status === "cancelled").length || 0;
+        const cancellationRate =
+          totalAllOrders > 0
+            ? Math.round((cancelledOrders / totalAllOrders) * 100)
+            : 0;
+
+        // WoW
+        const thisWeekStart = new Date(now);
+        thisWeekStart.setDate(thisWeekStart.getDate() - 7);
+        thisWeekStart.setHours(0, 0, 0, 0);
+        const lastWeekStart = new Date(thisWeekStart);
+        lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+        const [{ data: twOrds }, { data: lwOrds }] = await Promise.all([
+          supabase
+            .from("orders")
+            .select("total")
+            .eq("restaurant_id", restId)
+            .gte("created_at", thisWeekStart.toISOString())
+            .neq("status", "cancelled")
+            .eq("payment_status", "paid"),
+          supabase
+            .from("orders")
+            .select("total")
+            .eq("restaurant_id", restId)
+            .gte("created_at", lastWeekStart.toISOString())
+            .lt("created_at", thisWeekStart.toISOString())
+            .neq("status", "cancelled")
+            .eq("payment_status", "paid"),
+        ]);
+        const thisWeek = twOrds?.reduce((s, o) => s + o.total, 0) || 0;
+        const lastWeek = lwOrds?.reduce((s, o) => s + o.total, 0) || 0;
+        const wowDelta =
+          lastWeek === 0
+            ? thisWeek > 0
+              ? 100
+              : 0
+            : Math.round(((thisWeek - lastWeek) / lastWeek) * 100);
+
+        // Category breakdown
+        let categoryBreakdown: CategoryBreakdown[] = [];
+        if ((currentOrders?.length || 0) > 0) {
+          const { data: catItems } = await supabase
+            .from("order_items")
+            .select("quantity, price_at_time, menu_items(categories(name))")
+            .in(
+              "order_id",
+              (currentOrders || []).map((o) => o.id),
+            );
+          const catMap = new Map<string, { revenue: number; orders: number }>();
+          catItems?.forEach((item: any) => {
+            const cat = item.menu_items?.categories?.name || "Uncategorized";
+            const e = catMap.get(cat) || { revenue: 0, orders: 0 };
+            catMap.set(cat, {
+              revenue: e.revenue + item.price_at_time * item.quantity,
+              orders: e.orders + item.quantity,
+            });
+          });
+          categoryBreakdown = Array.from(catMap.entries())
+            .map(([name, v]) => ({
+              name,
+              revenue: Math.round(v.revenue),
+              orders: v.orders,
+            }))
+            .sort((a, b) => b.revenue - a.revenue);
+        }
+
+        // Top items
+        let topItems: Array<{ name: string; count: number }> = [];
+        if ((currentOrders?.length || 0) > 0) {
+          const { data: oi } = await supabase
+            .from("order_items")
+            .select("name, quantity")
+            .in(
+              "order_id",
+              (currentOrders || []).map((o) => o.id),
+            );
+          const ic = new Map<string, number>();
+          oi?.forEach((item) => {
+            ic.set(item.name, (ic.get(item.name) || 0) + item.quantity);
+          });
+          topItems = Array.from(ic.entries())
+            .map(([name, count]) => ({ name, count }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 5);
+        }
+
+        const currentCount = currentOrders?.length || 0;
+        const currentRevenue =
+          currentOrders?.reduce((s, o) => s + o.total, 0) || 0;
+        const activeOrders =
+          currentOrders?.filter((o) =>
+            ["pending", "confirmed", "preparing", "ready"].includes(o.status),
+          ).length || 0;
+
+        // Trend data
+        let trendData: Array<{
+          label: string;
+          revenue: number;
+          orders: number;
+          avgOrder: number;
+        }> = [];
+        if (period === "24h") {
+          const hm: Record<
+            number,
+            { revenue: number; orders: number; date: Date }
+          > = {};
+          for (let h = 0; h < 24; h++) {
+            const d = new Date(now);
+            d.setHours(now.getHours() - (23 - h), 0, 0, 0);
+            hm[h] = { revenue: 0, orders: 0, date: d };
+          }
+          currentOrders?.forEach((o) => {
+            const diff = Math.floor(
+              (now.getTime() - new Date(o.created_at).getTime()) /
+                (1000 * 60 * 60),
+            );
+            if (diff >= 0 && diff < 24) {
+              const idx = 23 - diff;
+              hm[idx].revenue += o.total;
+              hm[idx].orders++;
+            }
+          });
+          trendData = Object.values(hm).map((v) => ({
+            label: v.date.toLocaleTimeString("en-IN", {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+            revenue: Math.round(v.revenue),
+            orders: v.orders,
+            avgOrder: v.orders > 0 ? Math.round(v.revenue / v.orders) : 0,
+          }));
+        } else if (period === "7d" || period === "30d") {
+          const dm = new Map<
+            string,
+            { revenue: number; orders: number; date: Date }
+          >();
+          for (let i = config.days - 1; i >= 0; i--) {
+            const d = new Date(now);
+            d.setDate(d.getDate() - i);
+            d.setHours(0, 0, 0, 0);
+            dm.set(d.toDateString(), { revenue: 0, orders: 0, date: d });
+          }
+          currentOrders?.forEach((o) => {
+            const k = new Date(o.created_at).toDateString();
+            if (dm.has(k)) {
+              const c = dm.get(k)!;
+              c.revenue += o.total;
+              c.orders++;
+            }
+          });
+          trendData = Array.from(dm.values()).map((v) => ({
+            label: formatLabel(v.date, "day"),
+            revenue: Math.round(v.revenue),
+            orders: v.orders,
+            avgOrder: v.orders > 0 ? Math.round(v.revenue / v.orders) : 0,
+          }));
+        } else if (period === "90d") {
+          const pst = periodStart.getTime();
+          const wm = new Map<number, { revenue: number; orders: number }>();
+          for (let i = 0; i < 13; i++) wm.set(i, { revenue: 0, orders: 0 });
+          currentOrders?.forEach((o) => {
+            const idx = Math.floor(
+              (new Date(o.created_at).getTime() - pst) / (7 * 24 * 3600 * 1000),
+            );
+            if (idx >= 0 && idx < 13) {
+              const c = wm.get(idx)!;
+              c.revenue += o.total;
+              c.orders++;
+            }
+          });
+          trendData = Array.from(wm.values()).map((v, i) => ({
+            label: `Wk${i + 1}`,
+            revenue: Math.round(v.revenue),
+            orders: v.orders,
+            avgOrder: v.orders > 0 ? Math.round(v.revenue / v.orders) : 0,
+          }));
+        } else {
+          const months = period === "1y" ? 12 : 24;
+          const mm = new Map<
+            string,
+            { revenue: number; orders: number; date: Date }
+          >();
+          for (let i = months - 1; i >= 0; i--) {
+            const d = new Date(now);
+            d.setMonth(d.getMonth() - i);
+            d.setDate(1);
+            d.setHours(0, 0, 0, 0);
+            mm.set(`${d.getFullYear()}-${d.getMonth()}`, {
+              revenue: 0,
+              orders: 0,
+              date: d,
+            });
+          }
+          currentOrders?.forEach((o) => {
+            const d = new Date(o.created_at);
+            const k = `${d.getFullYear()}-${d.getMonth()}`;
+            if (mm.has(k)) {
+              const c = mm.get(k)!;
+              c.revenue += o.total;
+              c.orders++;
+            }
+          });
+          trendData = Array.from(mm.values()).map((v) => ({
+            label: formatLabel(v.date, "month"),
+            revenue: Math.round(v.revenue),
+            orders: v.orders,
+            avgOrder: v.orders > 0 ? Math.round(v.revenue / v.orders) : 0,
+          }));
+        }
+
+        // Hourly today
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const hm: Record<number, { orders: number; revenue: number }> = {};
+        for (let h = 0; h < 24; h++) hm[h] = { orders: 0, revenue: 0 };
+        currentOrders
+          ?.filter((o) => new Date(o.created_at) >= today)
+          .forEach((o) => {
+            const h = new Date(o.created_at).getHours();
+            hm[h].orders++;
+            hm[h].revenue += o.total;
+          });
+        const hourlyData = Object.entries(hm)
+          .filter(([h]) => Number(h) >= 8 && Number(h) <= 23)
+          .map(([h, v]) => ({
+            hour: `${String(h).padStart(2, "0")}:00`,
+            orders: v.orders,
+            revenue: Math.round(v.revenue),
+          }));
+
+        setStats({
+          currentOrders: currentCount,
+          currentRevenue,
+          activeOrders,
+          topItems,
+          trendData,
+          hourlyData,
+          previousOrders: previousOrders?.length || 0,
+          previousRevenue:
+            previousOrders?.reduce((s, o) => s + (o as any).total, 0) || 0,
+          cancelledOrders,
+          totalAllOrders,
+          tableRevenue,
+          slowMovers,
+          cancellationRate,
+          wowRevenue: { thisWeek, lastWeek, delta: wowDelta },
+          categoryBreakdown,
+        });
+        setRecentOrders(recent || []);
+      } catch (err) {
+        console.error("Dashboard error:", err);
+      } finally {
+        setLoading(false);
       }
-
-      const compareStart = new Date(periodStart);
-      if (period !== 'all') compareStart.setDate(compareStart.getDate() - config.days);
-
-      const { data: currentOrders } = await supabase
-        .from('orders').select('id, total, status, created_at')
-        .eq('restaurant_id', restId)
-        .gte('created_at', periodStart.toISOString())
-        .order('created_at', { ascending: true });
-
-      const { data: previousOrders } = await supabase
-        .from('orders').select('id, total')
-        .eq('restaurant_id', restId)
-        .gte('created_at', compareStart.toISOString())
-        .lt('created_at', periodStart.toISOString());
-
-      const { data: recent } = await supabase
-        .from('orders').select('id, order_number, table_number, status, total, created_at')
-        .eq('restaurant_id', restId)
-        .order('created_at', { ascending: false }).limit(5);
-
-      const { data: orderItems } = await supabase
-        .from('order_items').select('menu_item_id, quantity, menu_items(name)')
-        .eq('restaurant_id', restId)
-        .gte('created_at', periodStart.toISOString());
-
-      const currentCount = currentOrders?.length || 0;
-      const currentRevenue = currentOrders?.reduce((s, o) => s + o.total, 0) || 0;
-      const activeOrders = currentOrders?.filter(o =>
-        ['pending', 'confirmed', 'preparing', 'ready'].includes(o.status)
-      ).length || 0;
-      const previousCount = previousOrders?.length || 0;
-      const previousRevenue = previousOrders?.reduce((s, o) => s + o.total, 0) || 0;
-
-      /* Build trend data */
-      let trendData: Array<{ label: string; revenue: number; orders: number; avgOrder: number }> = [];
-
-      if (period === '24h') {
-        const hourlyMap: Record<number, { revenue: number; orders: number; date: Date }> = {};
-        for (let h = 0; h < 24; h++) {
-          const d = new Date(now); d.setHours(now.getHours() - (23 - h), 0, 0, 0);
-          hourlyMap[h] = { revenue: 0, orders: 0, date: d };
-        }
-        currentOrders?.forEach(o => {
-          const diff = Math.floor((now.getTime() - new Date(o.created_at).getTime()) / (1000 * 60 * 60));
-          if (diff >= 0 && diff < 24) { const idx = 23 - diff; hourlyMap[idx].revenue += o.total; hourlyMap[idx].orders++; }
-        });
-        trendData = Object.values(hourlyMap).map(v => ({
-          label: v.date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
-          revenue: Math.round(v.revenue), orders: v.orders,
-          avgOrder: v.orders > 0 ? Math.round(v.revenue / v.orders) : 0,
-        }));
-      } else if (period === '7d' || period === '30d') {
-        const dayMap = new Map<string, { revenue: number; orders: number; date: Date }>();
-        for (let i = config.days - 1; i >= 0; i--) {
-          const d = new Date(now); d.setDate(d.getDate() - i); d.setHours(0, 0, 0, 0);
-          dayMap.set(d.toDateString(), { revenue: 0, orders: 0, date: d });
-        }
-        currentOrders?.forEach(o => {
-          const key = new Date(o.created_at).toDateString();
-          if (dayMap.has(key)) { const c = dayMap.get(key)!; c.revenue += o.total; c.orders++; }
-        });
-        trendData = Array.from(dayMap.values()).map(v => ({
-          label: formatLabel(v.date, 'day'), revenue: Math.round(v.revenue),
-          orders: v.orders, avgOrder: v.orders > 0 ? Math.round(v.revenue / v.orders) : 0,
-        }));
-      } else if (period === '90d') {
-        const periodStartTime = periodStart.getTime();
-        const weekMap = new Map<number, { revenue: number; orders: number; weekStart: Date }>();
-        for (let i = 0; i < 13; i++) {
-          const ws = new Date(periodStart); ws.setDate(ws.getDate() + (i * 7));
-          weekMap.set(i, { revenue: 0, orders: 0, weekStart: ws });
-        }
-        currentOrders?.forEach(o => {
-          const idx = Math.floor((new Date(o.created_at).getTime() - periodStartTime) / (7 * 24 * 3600 * 1000));
-          if (idx >= 0 && idx < 13 && weekMap.has(idx)) { const c = weekMap.get(idx)!; c.revenue += o.total; c.orders++; }
-        });
-        trendData = Array.from(weekMap.values()).map((v, i) => ({
-          label: `Wk ${i + 1}`, revenue: Math.round(v.revenue),
-          orders: v.orders, avgOrder: v.orders > 0 ? Math.round(v.revenue / v.orders) : 0,
-        }));
-      } else {
-        // 1y or all — monthly
-        const monthMap = new Map<string, { revenue: number; orders: number; date: Date }>();
-        const months = period === '1y' ? 12 : 24;
-        for (let i = months - 1; i >= 0; i--) {
-          const d = new Date(now); d.setMonth(d.getMonth() - i); d.setDate(1); d.setHours(0, 0, 0, 0);
-          monthMap.set(`${d.getFullYear()}-${d.getMonth()}`, { revenue: 0, orders: 0, date: d });
-        }
-        currentOrders?.forEach(o => {
-          const d = new Date(o.created_at);
-          const key = `${d.getFullYear()}-${d.getMonth()}`;
-          if (monthMap.has(key)) { const c = monthMap.get(key)!; c.revenue += o.total; c.orders++; }
-        });
-        trendData = Array.from(monthMap.values()).map(v => ({
-          label: formatLabel(v.date, 'month'), revenue: Math.round(v.revenue),
-          orders: v.orders, avgOrder: v.orders > 0 ? Math.round(v.revenue / v.orders) : 0,
-        }));
-      }
-
-      /* Hourly for today */
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      const hourMap: Record<number, { orders: number; revenue: number }> = {};
-      for (let h = 0; h < 24; h++) hourMap[h] = { orders: 0, revenue: 0 };
-      currentOrders?.filter(o => new Date(o.created_at) >= today).forEach(o => {
-        const h = new Date(o.created_at).getHours();
-        hourMap[h].orders++; hourMap[h].revenue += o.total;
-      });
-      const hourlyData = Object.entries(hourMap)
-        .filter(([h]) => Number(h) >= 8 && Number(h) <= 23)
-        .map(([h, v]) => ({ hour: `${h.padStart(2, '0')}:00`, orders: v.orders, revenue: Math.round(v.revenue) }));
-
-      /* Top items */
-      const itemCounts = new Map<string, { name: string; count: number }>();
-      orderItems?.forEach((item: any) => {
-        const name = item.menu_items?.name || 'Unknown';
-        const cur = itemCounts.get(name) || { name, count: 0 };
-        itemCounts.set(name, { name, count: cur.count + item.quantity });
-      });
-      const topItems = Array.from(itemCounts.values()).sort((a, b) => b.count - a.count).slice(0, 5);
-
-      setStats({ currentOrders: currentCount, currentRevenue, activeOrders, topItems, trendData, hourlyData, previousOrders: previousCount, previousRevenue });
-      setRecentOrders(recent || []);
-    } catch (error) {
-      console.error('Dashboard error:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    },
+    [],
+  );
 
   useEffect(() => {
     const init = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return;
-      const { data: restaurant } = await supabase.from('restaurants').select('id').eq('owner_id', user.id).single();
-      if (!restaurant) { setLoading(false); return; }
+      const { data: restaurant } = await supabase
+        .from("restaurants")
+        .select("id")
+        .eq("owner_id", user.id)
+        .single();
+      if (!restaurant) {
+        setLoading(false);
+        return;
+      }
       setRestaurantId(restaurant.id);
-
-      const { data: sub } = await supabase.from('restaurant_subscriptions').select('status').eq('restaurant_id', restaurant.id).single();
-      const pro = ['active', 'trialing'].includes(sub?.status || '');
-      setIsPro(pro);
-
+      const { data: sub } = await supabase
+        .from("restaurant_subscriptions")
+        .select("status")
+        .eq("restaurant_id", restaurant.id)
+        .single();
+      setIsPro(["active", "trialing"].includes(sub?.status || ""));
       await fetchDashboardData(restaurant.id, timePeriod);
     };
     init();
@@ -336,9 +1044,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!restaurantId) return;
-    // If free user tries to use pro period, reset to 7d
-    if (!isPro && periodConfig[timePeriod].proOnly) {
-      setTimePeriod('7d');
+    if (!isPro && PERIOD_CFG[timePeriod].proOnly) {
+      setTimePeriod("7d");
       return;
     }
     setLoading(true);
@@ -347,391 +1054,1838 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!restaurantId) return;
-    const channel = supabase.channel('dashboard-live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => fetchDashboardData(restaurantId, timePeriod))
+    const ch = supabase
+      .channel("dashboard-rt")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "orders" },
+        () => {
+          fetchDashboardData(restaurantId, timePeriod);
+        },
+      )
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      supabase.removeChannel(ch);
+    };
   }, [restaurantId, timePeriod, fetchDashboardData]);
 
-  const formatCurrencyShort = (n: number) => `₹${n.toLocaleString('en-IN')}`;
-  const formatTime = (d: string) => new Date(d).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-  const calcTrend = (cur: number, prev: number) => prev === 0 ? (cur > 0 ? 100 : 0) : Math.round(((cur - prev) / prev) * 100);
+  const sparkRevenue = stats.trendData.slice(-7).map((d) => d.revenue);
+  const sparkOrders = stats.trendData.slice(-7).map((d) => d.orders);
 
-  const statusConfig: Record<string, { bg: string; color: string; dot: string }> = {
-    pending:   { bg: 'bg-amber-50',   color: 'text-amber-700',   dot: '#f59e0b' },
-    confirmed: { bg: 'bg-blue-50',    color: 'text-blue-700',    dot: '#3b82f6' },
-    preparing: { bg: 'bg-violet-50',  color: 'text-violet-700',  dot: '#8b5cf6' },
-    ready:     { bg: 'bg-emerald-50', color: 'text-emerald-700', dot: '#10b981' },
-    served:    { bg: 'bg-gray-50',    color: 'text-gray-600',    dot: '#9ca3af' },
-    cancelled: { bg: 'bg-red-50',     color: 'text-red-600',     dot: '#ef4444' },
-  };
-
+  /* ── SKELETON LOADING STATE ─────────────────────────────── */
   if (loading && !stats.currentOrders) {
     return (
-      <ProtectedRoute allowedRoles={['owner']}>
+      <ProtectedRoute allowedRoles={["owner"]}>
         <DashboardLayout>
-          <div className="flex items-center justify-center h-64">
-            <div className="text-center">
-              <div className="w-14 h-14 rounded-2xl bg-orange-100 flex items-center justify-center mx-auto mb-4">
-                <BarChart3 className="w-7 h-7 text-orange-600 animate-pulse" />
+          <style>{`
+            @keyframes tsSkeleton { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+            @keyframes tsFadeUp   { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+          `}</style>
+          {/* Header skeleton */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 24,
+              gap: 12,
+            }}
+          >
+            <div>
+              <Skeleton w={180} h={28} r={8} />
+              <div style={{ marginTop: 8 }}>
+                <Skeleton w={220} h={14} r={6} />
               </div>
-              <p className="text-gray-500 font-medium text-sm">Loading your analytics…</p>
             </div>
+            <Skeleton w={80} h={32} r={100} />
+          </div>
+          {/* Period bar skeleton */}
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 16,
+              padding: "12px 16px",
+              border: "1px solid rgba(0,0,0,.06)",
+              marginBottom: 20,
+            }}
+          >
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const }}>
+              {[70, 50, 55, 55, 50, 50].map((w, i) => (
+                <Skeleton key={i} w={w} h={32} r={10} />
+              ))}
+            </div>
+          </div>
+          {/* Stat cards skeleton */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))",
+              gap: 14,
+              marginBottom: 20,
+            }}
+          >
+            {[0, 1, 2, 3].map((i) => (
+              <SkeletonCard key={i} />
+            ))}
+          </div>
+          {/* Chart skeleton */}
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 18,
+              border: "1px solid rgba(0,0,0,.06)",
+              overflow: "hidden",
+              marginBottom: 14,
+            }}
+          >
+            <div
+              style={{
+                padding: "16px 20px",
+                borderBottom: "1px solid rgba(0,0,0,.05)",
+                display: "flex",
+                justifyContent: "space-between",
+              }}
+            >
+              <div>
+                <Skeleton w={140} h={16} r={6} />
+                <div style={{ marginTop: 6 }}>
+                  <Skeleton w={200} h={12} r={5} />
+                </div>
+              </div>
+              <Skeleton w={140} h={34} r={10} />
+            </div>
+            <div style={{ padding: "20px 12px 12px" }}>
+              <Skeleton w="100%" h={260} r={8} />
+            </div>
+          </div>
+          {/* Bottom grid skeleton */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))",
+              gap: 14,
+            }}
+          >
+            {[0, 1, 2, 3].map((i) => (
+              <div
+                key={i}
+                style={{
+                  background: "#fff",
+                  borderRadius: 18,
+                  border: "1px solid rgba(0,0,0,.06)",
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    padding: "16px 20px",
+                    borderBottom: "1px solid rgba(0,0,0,.05)",
+                  }}
+                >
+                  <Skeleton w={140} h={16} r={6} />
+                </div>
+                <div style={{ padding: 20 }}>
+                  {[0, 1, 2, 3, 4].map((j) => (
+                    <div key={j} style={{ marginBottom: 14 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          marginBottom: 6,
+                        }}
+                      >
+                        <Skeleton w="50%" h={13} r={5} />
+                        <Skeleton w={50} h={13} r={5} />
+                      </div>
+                      <Skeleton w="100%" h={5} r={100} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         </DashboardLayout>
       </ProtectedRoute>
     );
   }
 
-  return (
-    <ProtectedRoute allowedRoles={['owner']}>
-      <DashboardLayout>
-        <div style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+  /* ── MAIN RENDER ─────────────────────────────────────────── */
+  const CAT_COLORS = [
+    "#f97316",
+    "#6366f1",
+    "#10b981",
+    "#f59e0b",
+    "#ec4899",
+    "#3b82f6",
+    "#8b5cf6",
+  ];
 
-          {/* ── Header ── */}
-          <div style={{ marginBottom: 28, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+  return (
+    <ProtectedRoute allowedRoles={["owner"]}>
+      <DashboardLayout>
+        <style>{`
+          @keyframes tsFadeUp   { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+          @keyframes tsPulse    { 0%,100%{box-shadow:0 0 0 3px rgba(16,185,129,.2)} 50%{box-shadow:0 0 0 6px rgba(16,185,129,.08)} }
+          @keyframes tsSkeleton { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+          .ts-page * { box-sizing: border-box; }
+
+          /* responsive grid helpers */
+          .ts-stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px; }
+          .ts-grid-3-2   { display:grid; grid-template-columns:3fr 2fr; gap:14px; margin-bottom:14px; }
+          .ts-grid-2     { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px; }
+          .ts-grid-2-bottom { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+
+          @media (max-width: 1100px) {
+            .ts-stats-grid { grid-template-columns: repeat(2,1fr); }
+            .ts-grid-3-2   { grid-template-columns: 1fr; }
+          }
+          @media (max-width: 700px) {
+            .ts-stats-grid { grid-template-columns: repeat(2,1fr); gap:10px; }
+            .ts-grid-2     { grid-template-columns: 1fr; }
+            .ts-grid-2-bottom { grid-template-columns: 1fr; }
+          }
+          @media (max-width: 440px) {
+            .ts-stats-grid { grid-template-columns: 1fr; }
+          }
+
+          .ts-period-btn {
+            padding:7px 14px; border-radius:10px; font-size:12px; font-weight:700;
+            border:none; cursor:pointer; transition:all .15s; display:flex; align-items:center; gap:5px;
+            background:transparent; color:#64748b; font-family:inherit;
+          }
+          .ts-period-btn:hover:not(:disabled) { background:#f1f5f9; }
+          .ts-period-btn.ts-active { background:#f97316; color:#fff; box-shadow:0 4px 14px rgba(249,115,22,.35); }
+          .ts-period-btn:disabled  { color:#cbd5e1; cursor:not-allowed; }
+
+          .ts-chart-btn {
+            padding:6px 12px; border-radius:8px; font-size:12px; font-weight:700;
+            border:none; cursor:pointer; transition:all .15s; background:transparent;
+            color:#94a3b8; font-family:inherit; text-transform:capitalize;
+          }
+          .ts-chart-btn.ts-active { background:#fff; color:#0f172a; box-shadow:0 1px 4px rgba(0,0,0,.08); }
+
+          .ts-order-row { padding:13px 20px; border-bottom:1px solid rgba(0,0,0,.04); display:flex; align-items:center; gap:12px; transition:background .1s; cursor:default; }
+          .ts-order-row:last-child { border-bottom:none; }
+          .ts-order-row:hover { background:#f8f9fb; }
+
+          .ts-bar-enter { animation: tsBarIn .8s cubic-bezier(.34,1.56,.64,1) both; }
+          @keyframes tsBarIn { from{width:0} }
+
+          .ts-pro-tag { font-size:9px; font-weight:800; background:linear-gradient(135deg,#f97316,#ea580c); color:#fff; padding:2px 7px; border-radius:100px; }
+
+          .ts-view-all { display:flex; align-items:center; gap:3px; font-size:12px; font-weight:700; color:#f97316; text-decoration:none; }
+          .ts-view-all:hover { text-decoration:underline; }
+        `}</style>
+
+        <div
+          className="ts-page"
+          style={{
+            fontFamily: "'DM Sans',system-ui,sans-serif",
+            color: "#0f172a",
+          }}
+        >
+          {/* ── HEADER ─────────────────────────────────────── */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 16,
+              marginBottom: 22,
+              flexWrap: "wrap" as const,
+            }}
+          >
             <div>
-              <h1 style={{ fontSize: 26, fontWeight: 800, color: '#111827', letterSpacing: '-0.03em', marginBottom: 4 }}>
+              <h1
+                style={{
+                  fontSize: "clamp(20px,3vw,26px)",
+                  fontWeight: 900,
+                  color: "#0f172a",
+                  letterSpacing: "-0.04em",
+                  lineHeight: 1,
+                  margin: 0,
+                }}
+              >
                 Analytics
               </h1>
-              <p style={{ fontSize: 13, color: '#9ca3af' }}>
-                {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+              <p
+                style={{
+                  fontSize: 13,
+                  color: "#94a3b8",
+                  marginTop: 4,
+                  fontWeight: 500,
+                }}
+              >
+                {new Date().toLocaleDateString("en-IN", {
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                })}
               </p>
             </div>
-            {/* Live indicator */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', background: '#fff', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 100, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981', display: 'inline-block', boxShadow: '0 0 0 3px rgba(16,185,129,0.2)', animation: 'pulse 2s infinite' }} />
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>Live updates</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {loading && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 7,
+                    padding: "7px 14px",
+                    background: "#fff",
+                    border: "1px solid rgba(0,0,0,.06)",
+                    borderRadius: 100,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "#64748b",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: "50%",
+                      background: "#f97316",
+                      animation: "tsPulse 1s ease infinite",
+                    }}
+                  />
+                  Refreshing…
+                </div>
+              )}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 7,
+                  padding: "7px 14px",
+                  background: "#fff",
+                  border: "1px solid rgba(0,0,0,.06)",
+                  borderRadius: 100,
+                  boxShadow: "0 1px 6px rgba(0,0,0,.04)",
+                }}
+              >
+                <span
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: "50%",
+                    background: "#10b981",
+                    boxShadow: "0 0 0 3px rgba(16,185,129,.2)",
+                    animation: "tsPulse 2s ease-in-out infinite",
+                  }}
+                />
+                <span
+                  style={{ fontSize: 12, fontWeight: 700, color: "#475569" }}
+                >
+                  Live
+                </span>
+              </div>
             </div>
           </div>
 
-          {/* ── Time Period Selector ── */}
-          <div style={{
-            background: '#fff', borderRadius: 20, padding: '16px 20px',
-            border: '1px solid rgba(0,0,0,0.06)', boxShadow: '0 2px 16px rgba(0,0,0,0.04)',
-            marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginRight: 4 }}>
-              <Calendar className="w-4 h-4 text-gray-400" />
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Period</span>
+          {/* ── PERIOD SELECTOR ────────────────────────────── */}
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 16,
+              padding: "10px 14px",
+              border: "1px solid rgba(0,0,0,.06)",
+              boxShadow: "0 2px 10px rgba(0,0,0,.04)",
+              marginBottom: 20,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              flexWrap: "wrap" as const,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+                fontSize: 11,
+                fontWeight: 700,
+                color: "#94a3b8",
+                textTransform: "uppercase" as const,
+                letterSpacing: "0.06em",
+                marginRight: 4,
+              }}
+            >
+              <Calendar size={11} /> Period
             </div>
-            {(Object.keys(periodConfig) as TimePeriod[]).map((period) => {
-              const config = periodConfig[period];
-              const isLocked = config.proOnly && !isPro;
-              const isActive = timePeriod === period;
+            {(Object.keys(PERIOD_CFG) as TimePeriod[]).map((p) => {
+              const cfg = PERIOD_CFG[p];
+              const locked = cfg.proOnly && !isPro;
               return (
                 <button
-                  key={period}
-                  onClick={() => !isLocked && setTimePeriod(period)}
-                  style={{
-                    padding: '7px 16px', borderRadius: 12, fontSize: 13, fontWeight: 600,
-                    cursor: isLocked ? 'not-allowed' : 'pointer',
-                    border: 'none', outline: 'none', display: 'flex', alignItems: 'center', gap: 6,
-                    transition: 'all 0.15s',
-                    background: isActive ? 'linear-gradient(135deg, #f97316, #ea580c)' : isLocked ? '#fafafa' : '#f9fafb',
-                    color: isActive ? '#fff' : isLocked ? '#d1d5db' : '#374151',
-                    boxShadow: isActive ? '0 4px 12px rgba(249,115,22,0.3)' : 'none',
-                  }}
+                  key={p}
+                  disabled={locked}
+                  className={`ts-period-btn ${timePeriod === p ? "ts-active" : ""}`}
+                  onClick={() => !locked && setTimePeriod(p)}
                 >
-                  {isLocked && <Lock className="w-3 h-3" />}
-                  {config.label}
-                  {config.proOnly && !isPro && (
-                    <span style={{ fontSize: 9, fontWeight: 700, background: 'rgba(249,115,22,0.1)', color: '#f97316', padding: '2px 6px', borderRadius: 100 }}>PRO</span>
+                  {locked && <Lock size={10} />}
+                  {cfg.label}
+                  {cfg.proOnly && !isPro && (
+                    <span className="ts-pro-tag">PRO</span>
                   )}
                 </button>
               );
             })}
             {!isPro && (
-              <Link href="/dashboard/pricing" style={{
-                marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6,
-                fontSize: 12, fontWeight: 700, color: '#f97316', textDecoration: 'none',
-                padding: '6px 14px', background: 'rgba(249,115,22,0.08)', borderRadius: 10,
-              }}>
-                <Zap className="w-3.5 h-3.5" /> Unlock all periods
+              <Link
+                href="/dashboard/pricing"
+                style={{
+                  marginLeft: "auto",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 5,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: "#f97316",
+                  textDecoration: "none",
+                  padding: "6px 12px",
+                  background: "rgba(249,115,22,.08)",
+                  borderRadius: 8,
+                }}
+              >
+                <Zap size={12} /> Unlock all
               </Link>
             )}
           </div>
 
-          {/* ── Stat Cards ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 24 }}>
+          {/* ── STAT CARDS ──────────────────────────────────── */}
+          <div className="ts-stats-grid">
             <StatCard
-              icon={<ShoppingBag className="w-5 h-5 text-blue-600" />}
-              label={`Orders · ${periodConfig[timePeriod].label}`}
+              icon={<ShoppingBag size={18} />}
+              label={`Orders · ${PERIOD_CFG[timePeriod].label}`}
               value={String(stats.currentOrders)}
               trend={calcTrend(stats.currentOrders, stats.previousOrders)}
               trendLabel="vs previous period"
-              accent="rgba(59,130,246,0.1)"
+              accentColor="#3b82f6"
+              sparkData={sparkOrders}
               delay={0}
             />
             <StatCard
-              icon={<DollarSign className="w-5 h-5 text-emerald-600" />}
-              label={`Revenue · ${periodConfig[timePeriod].label}`}
-              value={formatCurrencyShort(stats.currentRevenue)}
+              icon={<DollarSign size={18} />}
+              label={`Revenue · ${PERIOD_CFG[timePeriod].label}`}
+              value={fmtShort(stats.currentRevenue)}
               trend={calcTrend(stats.currentRevenue, stats.previousRevenue)}
               trendLabel="vs previous period"
-              accent="rgba(16,185,129,0.1)"
-              delay={50}
+              accentColor="#10b981"
+              sparkData={sparkRevenue}
+              delay={60}
             />
             <StatCard
-              icon={<Clock className="w-5 h-5 text-orange-600" />}
+              icon={<ChefHat size={18} />}
               label="Active Orders"
               value={String(stats.activeOrders)}
               trend={0}
-              trendLabel="currently in kitchen"
-              accent="rgba(249,115,22,0.1)"
-              delay={100}
+              trendLabel="in kitchen right now"
+              accentColor="#f97316"
+              hideTrend
+              delay={120}
             />
             <StatCard
-              icon={<TrendingUp className="w-5 h-5 text-violet-600" />}
+              icon={<TrendingUp size={18} />}
               label="Avg. Order Value"
-              value={stats.currentOrders > 0 ? formatCurrencyShort(Math.round(stats.currentRevenue / stats.currentOrders)) : '₹0'}
+              value={
+                stats.currentOrders > 0
+                  ? fmt(Math.round(stats.currentRevenue / stats.currentOrders))
+                  : "₹0"
+              }
               trend={calcTrend(
-                stats.currentOrders > 0 ? stats.currentRevenue / stats.currentOrders : 0,
-                stats.previousOrders > 0 ? stats.previousRevenue / stats.previousOrders : 0
+                stats.currentOrders > 0
+                  ? stats.currentRevenue / stats.currentOrders
+                  : 0,
+                stats.previousOrders > 0
+                  ? stats.previousRevenue / stats.previousOrders
+                  : 0,
               )}
               trendLabel="vs previous period"
-              accent="rgba(139,92,246,0.1)"
-              delay={150}
+              accentColor="#8b5cf6"
+              delay={180}
             />
           </div>
 
-          {/* ── PRIMARY CHART ── */}
-          <div style={{
-            background: '#fff', borderRadius: 20, border: '1px solid rgba(0,0,0,0.06)',
-            boxShadow: '0 2px 20px rgba(0,0,0,0.04)', marginBottom: 20, overflow: 'hidden',
-          }}>
-            <div style={{ padding: '20px 24px', borderBottom: '1px solid rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-              <div>
-                <h2 style={{ fontSize: 16, fontWeight: 800, color: '#111827', letterSpacing: '-0.02em' }}>Performance Trend</h2>
-                <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>Revenue & orders over {periodConfig[timePeriod].label}</p>
+          {/* ── MAIN TREND CHART ────────────────────────────── */}
+          <div style={{ marginBottom: 14 }}>
+            <Card>
+              <CardHead>
+                <div>
+                  <p
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 800,
+                      color: "#0f172a",
+                      letterSpacing: "-0.02em",
+                    }}
+                  >
+                    Performance Trend
+                  </p>
+                  <p
+                    style={{
+                      fontSize: 11,
+                      color: "#94a3b8",
+                      marginTop: 2,
+                      fontWeight: 500,
+                    }}
+                  >
+                    Revenue & orders over {PERIOD_CFG[timePeriod].label}
+                  </p>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    background: "#f1f5f9",
+                    borderRadius: 10,
+                    padding: 3,
+                    gap: 2,
+                  }}
+                >
+                  {(["both", "revenue", "orders"] as const).map((m) => (
+                    <button
+                      key={m}
+                      className={`ts-chart-btn ${activeChart === m ? "ts-active" : ""}`}
+                      onClick={() => setActiveChart(m)}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              </CardHead>
+              <div style={{ padding: "20px 8px 12px" }}>
+                <ResponsiveContainer width="100%" height={240}>
+                  <ComposedChart
+                    data={stats.trendData}
+                    margin={{ top: 8, right: 20, left: 4, bottom: 4 }}
+                  >
+                    <defs>
+                      <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop
+                          offset="5%"
+                          stopColor="#f97316"
+                          stopOpacity={0.2}
+                        />
+                        <stop
+                          offset="95%"
+                          stopColor="#f97316"
+                          stopOpacity={0}
+                        />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="#f1f5f9"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="label"
+                      tick={{ fill: "#94a3b8", fontSize: 10 }}
+                      axisLine={false}
+                      tickLine={false}
+                      interval={timePeriod === "24h" ? 3 : "preserveStartEnd"}
+                      dy={6}
+                    />
+                    {(activeChart === "both" || activeChart === "revenue") && (
+                      <YAxis
+                        yAxisId="rev"
+                        orientation="left"
+                        tick={{ fill: "#94a3b8", fontSize: 10 }}
+                        axisLine={false}
+                        tickLine={false}
+                        tickFormatter={(v) =>
+                          `₹${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`
+                        }
+                        width={52}
+                      />
+                    )}
+                    {(activeChart === "both" || activeChart === "orders") && (
+                      <YAxis
+                        yAxisId="ord"
+                        orientation="right"
+                        tick={{ fill: "#94a3b8", fontSize: 10 }}
+                        axisLine={false}
+                        tickLine={false}
+                        width={28}
+                        allowDecimals={false}
+                      />
+                    )}
+                    <Tooltip content={<ChartTooltip />} />
+                    {(activeChart === "both" || activeChart === "revenue") && (
+                      <Area
+                        yAxisId="rev"
+                        type="monotone"
+                        dataKey="revenue"
+                        name="Revenue (₹)"
+                        stroke="#f97316"
+                        strokeWidth={2.5}
+                        fill="url(#revGrad)"
+                        dot={{ r: 3, fill: "#f97316", strokeWidth: 0 }}
+                        activeDot={{ r: 5, fill: "#f97316" }}
+                      />
+                    )}
+                    {(activeChart === "both" || activeChart === "orders") && (
+                      <Line
+                        yAxisId="ord"
+                        type="monotone"
+                        dataKey="orders"
+                        name="Orders"
+                        stroke="#6366f1"
+                        strokeWidth={2.5}
+                        dot={{ r: 3, fill: "#6366f1", strokeWidth: 0 }}
+                        activeDot={{ r: 5, fill: "#6366f1" }}
+                        strokeDasharray={
+                          activeChart === "both" ? "6 3" : undefined
+                        }
+                      />
+                    )}
+                  </ComposedChart>
+                </ResponsiveContainer>
               </div>
-              <div style={{ display: 'flex', background: '#f9fafb', borderRadius: 12, padding: 4, gap: 2 }}>
-                {(['both', 'revenue', 'orders'] as const).map(mode => (
-                  <button key={mode} onClick={() => setActiveChart(mode)} style={{
-                    padding: '6px 14px', borderRadius: 9, fontSize: 12, fontWeight: 600,
-                    border: 'none', cursor: 'pointer', transition: 'all 0.15s', textTransform: 'capitalize',
-                    background: activeChart === mode ? '#fff' : 'transparent',
-                    color: activeChart === mode ? '#111827' : '#9ca3af',
-                    boxShadow: activeChart === mode ? '0 1px 4px rgba(0,0,0,0.1)' : 'none',
-                  }}>{mode}</button>
-                ))}
-              </div>
-            </div>
-            <div style={{ padding: '20px 8px 12px' }}>
-              <ResponsiveContainer width="100%" height={320}>
-                <ComposedChart data={stats.trendData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-                  <defs>
-                    <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#f97316" stopOpacity={0.18} />
-                      <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false}
-                    interval={timePeriod === '1y' || timePeriod === 'all' ? 0 : timePeriod === '24h' ? 2 : 'preserveStartEnd'} />
-                  {(activeChart === 'both' || activeChart === 'revenue') && (
-                    <YAxis yAxisId="revenue" orientation="left" tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false}
-                      tickFormatter={v => `₹${v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v}`} width={65} />
-                  )}
-                  {(activeChart === 'both' || activeChart === 'orders') && (
-                    <YAxis yAxisId="orders" orientation="right" tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} width={40} />
-                  )}
-                  <Tooltip content={<ChartTooltip />} />
-                  <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, paddingTop: 16 }} />
-                  {(activeChart === 'both' || activeChart === 'revenue') && (
-                    <Area yAxisId="revenue" type="monotone" dataKey="revenue" name="Revenue (₹)"
-                      stroke="#f97316" strokeWidth={2.5} fill="url(#revGrad)"
-                      dot={{ r: 3.5, fill: '#f97316', strokeWidth: 0 }} activeDot={{ r: 6, fill: '#f97316' }} />
-                  )}
-                  {(activeChart === 'both' || activeChart === 'orders') && (
-                    <Line yAxisId="orders" type="monotone" dataKey="orders" name="Orders"
-                      stroke="#6366f1" strokeWidth={2.5} dot={{ r: 3.5, fill: '#6366f1', strokeWidth: 0 }}
-                      activeDot={{ r: 6, fill: '#6366f1' }} strokeDasharray={activeChart === 'both' ? '5 3' : undefined} />
-                  )}
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
+            </Card>
           </div>
 
-          {/* ── SECONDARY ROW ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 20, marginBottom: 20 }}>
-
-            {/* Hourly Activity */}
-            <div style={{ background: '#fff', borderRadius: 20, border: '1px solid rgba(0,0,0,0.06)', boxShadow: '0 2px 16px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
-              <div style={{ padding: '20px 24px', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
-                <h2 style={{ fontSize: 15, fontWeight: 800, color: '#111827', letterSpacing: '-0.02em' }}>Today's Rush Hours</h2>
-                <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>Order volume by hour — spot peak times</p>
-              </div>
-              <div style={{ padding: '16px 8px 8px' }}>
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={stats.hourlyData} barSize={14} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-                    <XAxis dataKey="hour" tick={{ fill: '#9ca3af', fontSize: 10 }} axisLine={false} tickLine={false} interval={1} />
-                    <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} width={28} allowDecimals={false} />
+          {/* ── RUSH HOURS + AVG ORDER ───────────────────────── */}
+          <div className="ts-grid-3-2">
+            <Card>
+              <CardHead>
+                <div>
+                  <p
+                    style={{ fontSize: 14, fontWeight: 800, color: "#0f172a" }}
+                  >
+                    Rush Hours
+                  </p>
+                  <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+                    Today's order volume by hour
+                  </p>
+                </div>
+                <Activity size={15} style={{ color: "#94a3b8" }} />
+              </CardHead>
+              <div style={{ padding: "16px 8px 12px" }}>
+                <ResponsiveContainer width="100%" height={170}>
+                  <BarChart
+                    data={stats.hourlyData}
+                    barSize={14}
+                    margin={{ top: 4, right: 12, left: 0, bottom: 0 }}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="#f1f5f9"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="hour"
+                      tick={{ fill: "#94a3b8", fontSize: 9 }}
+                      axisLine={false}
+                      tickLine={false}
+                      interval={1}
+                      dy={4}
+                    />
+                    <YAxis
+                      tick={{ fill: "#94a3b8", fontSize: 10 }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={22}
+                      allowDecimals={false}
+                    />
                     <Tooltip content={<ChartTooltip />} />
-                    <Bar dataKey="orders" name="Orders" radius={[6, 6, 0, 0]}>
-                      {stats.hourlyData.map((entry, index) => (
-                        <rect key={index} fill={entry.orders === Math.max(...stats.hourlyData.map(d => d.orders)) ? '#f97316' : '#fde5d1'} />
-                      ))}
-                    </Bar>
+                    <Bar
+                      dataKey="orders"
+                      name="Orders"
+                      radius={[5, 5, 0, 0]}
+                      fill="#fde5d1"
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-            </div>
+            </Card>
 
-            {/* Avg Order Trend — PRO ONLY */}
-            <div style={{ position: 'relative', background: '#fff', borderRadius: 20, border: '1px solid rgba(0,0,0,0.06)', boxShadow: '0 2px 16px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
-              <div style={{ padding: '20px 24px', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <h2 style={{ fontSize: 15, fontWeight: 800, color: '#111827', letterSpacing: '-0.02em' }}>Avg. Order Trend</h2>
-                  {!isPro && (
-                    <span style={{ fontSize: 10, fontWeight: 800, background: 'linear-gradient(135deg,#f97316,#ea580c)', color: '#fff', padding: '3px 8px', borderRadius: 100 }}>PRO</span>
-                  )}
+            <div style={{ position: "relative" }}>
+              <Card>
+                <CardHead>
+                  <div>
+                    <div
+                      style={{ display: "flex", alignItems: "center", gap: 7 }}
+                    >
+                      <p
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 800,
+                          color: "#0f172a",
+                        }}
+                      >
+                        Avg. Order
+                      </p>
+                      {!isPro && <ProBadge />}
+                    </div>
+                    <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+                      Spend per order over time
+                    </p>
+                  </div>
+                </CardHead>
+                <div
+                  style={{
+                    padding: "16px 8px 12px",
+                    filter: !isPro ? "blur(3px)" : "none",
+                    pointerEvents: !isPro ? "none" : "auto",
+                  }}
+                >
+                  <ResponsiveContainer width="100%" height={170}>
+                    <AreaChart
+                      data={stats.trendData}
+                      margin={{ top: 4, right: 12, left: 0, bottom: 0 }}
+                    >
+                      <defs>
+                        <linearGradient
+                          id="avgGrad"
+                          x1="0"
+                          y1="0"
+                          x2="0"
+                          y2="1"
+                        >
+                          <stop
+                            offset="5%"
+                            stopColor="#10b981"
+                            stopOpacity={0.2}
+                          />
+                          <stop
+                            offset="95%"
+                            stopColor="#10b981"
+                            stopOpacity={0}
+                          />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="#f1f5f9"
+                        vertical={false}
+                      />
+                      <XAxis
+                        dataKey="label"
+                        tick={{ fill: "#94a3b8", fontSize: 9 }}
+                        axisLine={false}
+                        tickLine={false}
+                        interval="preserveStartEnd"
+                        dy={4}
+                      />
+                      <YAxis
+                        tick={{ fill: "#94a3b8", fontSize: 10 }}
+                        axisLine={false}
+                        tickLine={false}
+                        tickFormatter={(v) => `₹${v}`}
+                        width={46}
+                      />
+                      <Tooltip content={<ChartTooltip />} />
+                      <Area
+                        type="monotone"
+                        dataKey="avgOrder"
+                        name="Avg Order (₹)"
+                        stroke="#10b981"
+                        strokeWidth={2.5}
+                        fill="url(#avgGrad)"
+                        dot={{ r: 2.5, fill: "#10b981", strokeWidth: 0 }}
+                        activeDot={{ r: 5 }}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
                 </div>
-                <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>How spend per order is changing</p>
-              </div>
-              <div style={{ padding: '16px 8px 8px', filter: !isPro ? 'blur(3px)' : 'none', pointerEvents: !isPro ? 'none' : 'auto' }}>
-                <ResponsiveContainer width="100%" height={200}>
-                  <AreaChart data={stats.trendData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="avgGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
-                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fill: '#9ca3af', fontSize: 10 }} axisLine={false} tickLine={false} interval={'preserveStartEnd'} />
-                    <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `₹${v}`} width={55} />
-                    <Tooltip content={<ChartTooltip />} />
-                    <Area type="monotone" dataKey="avgOrder" name="Avg Order (₹)" stroke="#10b981" strokeWidth={2.5} fill="url(#avgGrad)"
-                      dot={{ r: 3, fill: '#10b981', strokeWidth: 0 }} activeDot={{ r: 5 }} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
+              </Card>
               {!isPro && (
-                <ProBlurOverlay
+                <ProOverlay
                   title="Avg. Order Trend"
-                  description="See how your per-order spend is trending over time — identify your most profitable periods."
+                  description="See how spend per order is shifting — find your most profitable times."
                 />
               )}
             </div>
           </div>
 
-          {/* ── BOTTOM ROW ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-
-            {/* Recent Orders */}
-            <div style={{ background: '#fff', borderRadius: 20, border: '1px solid rgba(0,0,0,0.06)', boxShadow: '0 2px 16px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
-              <div style={{ padding: '20px 24px', borderBottom: '1px solid rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <h2 style={{ fontSize: 15, fontWeight: 800, color: '#111827', letterSpacing: '-0.02em' }}>Recent Orders</h2>
-                <Link href="/dashboard/orders" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600, color: '#f97316', textDecoration: 'none' }}>
-                  View all <ChevronRight className="w-3.5 h-3.5" />
-                </Link>
-              </div>
-              {recentOrders.length === 0 ? (
-                <div style={{ padding: 48, textAlign: 'center' }}>
-                  <ShoppingBag style={{ width: 40, height: 40, color: '#e5e7eb', margin: '0 auto 12px' }} />
-                  <p style={{ color: '#9ca3af', fontSize: 13, fontWeight: 500 }}>No orders yet</p>
-                </div>
-              ) : (
+          {/* ── WoW + CANCELLATION ──────────────────────────── */}
+          <div className="ts-grid-2">
+            {/* WoW Revenue */}
+            <Card>
+              <CardHead>
                 <div>
-                  {recentOrders.map((order) => {
-                    const sc = statusConfig[order.status] || statusConfig.served;
-                    return (
-                      <div key={order.id} style={{ padding: '14px 24px', borderBottom: '1px solid rgba(0,0,0,0.04)', display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <div style={{ width: 36, height: 36, borderRadius: 12, background: '#f9fafb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          <span style={{ fontSize: 13, fontWeight: 800, color: '#374151' }}>T{order.table_number}</span>
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>Table {order.table_number}</span>
-                            <span style={{ fontSize: 10, color: '#9ca3af', background: '#f3f4f6', padding: '2px 8px', borderRadius: 100, fontWeight: 600 }}>#{order.order_number}</span>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: sc.dot, display: 'inline-block', flexShrink: 0 }} />
-                            <span style={{ fontSize: 11, color: '#6b7280', textTransform: 'capitalize', fontWeight: 500 }}>{order.status}</span>
-                            <span style={{ fontSize: 11, color: '#d1d5db' }}>·</span>
-                            <span style={{ fontSize: 11, color: '#9ca3af' }}>{formatTime(order.created_at)}</span>
-                          </div>
-                        </div>
-                        <span style={{ fontSize: 14, fontWeight: 800, color: '#111827', flexShrink: 0 }}>{formatCurrencyShort(order.total)}</span>
-                      </div>
-                    );
-                  })}
+                  <p
+                    style={{ fontSize: 14, fontWeight: 800, color: "#0f172a" }}
+                  >
+                    Week-over-Week
+                  </p>
+                  <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+                    This week vs last week
+                  </p>
                 </div>
-              )}
-            </div>
-
-            {/* Top Items — PRO gets full history, free gets period only */}
-            <div style={{ background: '#fff', borderRadius: 20, border: '1px solid rgba(0,0,0,0.06)', boxShadow: '0 2px 16px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
-              <div style={{ padding: '20px 24px', borderBottom: '1px solid rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div>
-                  <h2 style={{ fontSize: 15, fontWeight: 800, color: '#111827', letterSpacing: '-0.02em' }}>Top Sellers</h2>
-                  <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{periodConfig[timePeriod].label} bestsellers</p>
-                </div>
-                <Flame style={{ width: 18, height: 18, color: '#f97316' }} />
-              </div>
-              <div style={{ padding: '16px 24px' }}>
-                {stats.topItems.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '32px 0' }}>
-                    <UtensilsCrossed style={{ width: 36, height: 36, color: '#e5e7eb', margin: '0 auto 12px' }} />
-                    <p style={{ color: '#9ca3af', fontSize: 13, fontWeight: 500 }}>No sales data yet</p>
+                <TrendingUp size={15} style={{ color: "#94a3b8" }} />
+              </CardHead>
+              <CardBody>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-end",
+                    gap: 12,
+                    marginBottom: 16,
+                  }}
+                >
+                  <div>
+                    <p
+                      style={{
+                        fontSize: 11,
+                        color: "#94a3b8",
+                        fontWeight: 600,
+                        marginBottom: 3,
+                      }}
+                    >
+                      This week
+                    </p>
+                    <p
+                      style={{
+                        fontSize: 28,
+                        fontWeight: 900,
+                        color: "#0f172a",
+                        letterSpacing: "-0.04em",
+                        lineHeight: 1,
+                      }}
+                    >
+                      {fmtShort(stats.wowRevenue.thisWeek)}
+                    </p>
                   </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {stats.topItems.map((item, i) => {
-                      const maxCount = stats.topItems[0].count;
-                      const pct = Math.round((item.count / maxCount) * 100);
+                  <span
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 3,
+                      fontSize: 11,
+                      fontWeight: 800,
+                      padding: "4px 9px",
+                      borderRadius: 100,
+                      marginBottom: 4,
+                      background:
+                        stats.wowRevenue.delta >= 0 ? "#ecfdf5" : "#fef2f2",
+                      color:
+                        stats.wowRevenue.delta >= 0 ? "#059669" : "#dc2626",
+                    }}
+                  >
+                    {stats.wowRevenue.delta >= 0 ? (
+                      <ArrowUpRight size={11} />
+                    ) : (
+                      <ArrowDownRight size={11} />
+                    )}
+                    {Math.abs(stats.wowRevenue.delta)}%
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: 20, marginBottom: 16 }}>
+                  <div>
+                    <p
+                      style={{
+                        fontSize: 10,
+                        color: "#94a3b8",
+                        fontWeight: 600,
+                        marginBottom: 2,
+                      }}
+                    >
+                      Last week
+                    </p>
+                    <p
+                      style={{
+                        fontSize: 15,
+                        fontWeight: 800,
+                        color: "#475569",
+                      }}
+                    >
+                      {fmtShort(stats.wowRevenue.lastWeek)}
+                    </p>
+                  </div>
+                  <div>
+                    <p
+                      style={{
+                        fontSize: 10,
+                        color: "#94a3b8",
+                        fontWeight: 600,
+                        marginBottom: 2,
+                      }}
+                    >
+                      Difference
+                    </p>
+                    <p
+                      style={{
+                        fontSize: 15,
+                        fontWeight: 800,
+                        color:
+                          stats.wowRevenue.delta >= 0 ? "#059669" : "#dc2626",
+                      }}
+                    >
+                      {stats.wowRevenue.delta >= 0 ? "+" : ""}
+                      {fmtShort(
+                        Math.abs(
+                          stats.wowRevenue.thisWeek - stats.wowRevenue.lastWeek,
+                        ),
+                      )}
+                    </p>
+                  </div>
+                </div>
+                {[
+                  {
+                    label: "This week",
+                    value: stats.wowRevenue.thisWeek,
+                    color: "#f97316",
+                  },
+                  {
+                    label: "Last week",
+                    value: stats.wowRevenue.lastWeek,
+                    color: "#e2e8f0",
+                  },
+                ].map(({ label, value, color }) => {
+                  const max = Math.max(
+                    stats.wowRevenue.thisWeek,
+                    stats.wowRevenue.lastWeek,
+                    1,
+                  );
+                  return (
+                    <div key={label} style={{ marginBottom: 8 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          marginBottom: 4,
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: 11,
+                            color: "#94a3b8",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {label}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            color: "#475569",
+                          }}
+                        >
+                          {fmtShort(value)}
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          height: 6,
+                          background: "#f1f5f9",
+                          borderRadius: 100,
+                          overflow: "hidden",
+                        }}
+                      >
+                        <div
+                          className="ts-bar-enter"
+                          style={{
+                            height: "100%",
+                            borderRadius: 100,
+                            background: color,
+                            width: `${Math.round((value / max) * 100)}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </CardBody>
+            </Card>
+
+            {/* Cancellation Rate — FIX: use stats.totalAllOrders + stats.cancelledOrders */}
+            <Card>
+              <CardHead>
+                <div>
+                  <p
+                    style={{ fontSize: 14, fontWeight: 800, color: "#0f172a" }}
+                  >
+                    Cancellation Rate
+                  </p>
+                  <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+                    For selected period
+                  </p>
+                </div>
+              </CardHead>
+              <CardBody
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  paddingTop: 20,
+                }}
+              >
+                <div
+                  style={{
+                    position: "relative",
+                    width: 120,
+                    height: 120,
+                    marginBottom: 16,
+                  }}
+                >
+                  <svg width="120" height="120" viewBox="0 0 120 120">
+                    <circle
+                      cx="60"
+                      cy="60"
+                      r="48"
+                      fill="none"
+                      stroke="#f1f5f9"
+                      strokeWidth="14"
+                    />
+                    <circle
+                      cx="60"
+                      cy="60"
+                      r="48"
+                      fill="none"
+                      stroke={
+                        stats.cancellationRate > 20
+                          ? "#ef4444"
+                          : stats.cancellationRate > 10
+                            ? "#f59e0b"
+                            : "#10b981"
+                      }
+                      strokeWidth="14"
+                      strokeLinecap="round"
+                      strokeDasharray={`${(stats.cancellationRate / 100) * 301.6} 301.6`}
+                      transform="rotate(-90 60 60)"
+                      style={{
+                        transition:
+                          "stroke-dasharray 1s cubic-bezier(.34,1.56,.64,1)",
+                      }}
+                    />
+                  </svg>
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: 24,
+                        fontWeight: 900,
+                        color: "#0f172a",
+                        lineHeight: 1,
+                      }}
+                    >
+                      {stats.cancellationRate}%
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        color: "#94a3b8",
+                        fontWeight: 600,
+                      }}
+                    >
+                      rate
+                    </span>
+                  </div>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 24,
+                    textAlign: "center",
+                    marginBottom: 14,
+                  }}
+                >
+                  <div>
+                    <p
+                      style={{
+                        fontSize: 18,
+                        fontWeight: 900,
+                        color: "#0f172a",
+                      }}
+                    >
+                      {stats.cancelledOrders}
+                    </p>
+                    <p
+                      style={{
+                        fontSize: 11,
+                        color: "#94a3b8",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Cancelled
+                    </p>
+                  </div>
+                  <div style={{ width: 1, background: "rgba(0,0,0,.06)" }} />
+                  <div>
+                    <p
+                      style={{
+                        fontSize: 18,
+                        fontWeight: 900,
+                        color: "#0f172a",
+                      }}
+                    >
+                      {stats.totalAllOrders}
+                    </p>
+                    <p
+                      style={{
+                        fontSize: 11,
+                        color: "#94a3b8",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Total orders
+                    </p>
+                  </div>
+                </div>
+                <p
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color:
+                      stats.cancellationRate > 20
+                        ? "#dc2626"
+                        : stats.cancellationRate > 10
+                          ? "#d97706"
+                          : "#059669",
+                    background:
+                      stats.cancellationRate > 20
+                        ? "#fef2f2"
+                        : stats.cancellationRate > 10
+                          ? "#fffbeb"
+                          : "#ecfdf5",
+                    padding: "5px 14px",
+                    borderRadius: 100,
+                  }}
+                >
+                  {stats.cancellationRate > 20
+                    ? "⚠ High — investigate causes"
+                    : stats.cancellationRate > 10
+                      ? "Moderate — monitor closely"
+                      : "✓ Healthy cancellation rate"}
+                </p>
+              </CardBody>
+            </Card>
+          </div>
+
+          {/* ── TABLE REVENUE + CATEGORY BREAKDOWN ──────────── */}
+          <div className="ts-grid-2">
+            <div style={{ position: "relative" }}>
+              <Card>
+                <CardHead>
+                  <div>
+                    <div
+                      style={{ display: "flex", alignItems: "center", gap: 7 }}
+                    >
+                      <p
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 800,
+                          color: "#0f172a",
+                        }}
+                      >
+                        Revenue by Table
+                      </p>
+                      {!isPro && <ProBadge />}
+                    </div>
+                    <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+                      Top earning tables
+                    </p>
+                  </div>
+                </CardHead>
+                <CardBody
+                  style={{
+                    filter: !isPro ? "blur(3px)" : "none",
+                    pointerEvents: !isPro ? "none" : "auto",
+                  }}
+                >
+                  {stats.tableRevenue.length === 0 ? (
+                    <Empty
+                      icon={<UtensilsCrossed size={32} />}
+                      text="No data yet"
+                    />
+                  ) : (
+                    stats.tableRevenue.map((t, i) => {
+                      const max = stats.tableRevenue[0].revenue;
                       return (
-                        <div key={item.name}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                              <span style={{
-                                width: 24, height: 24, borderRadius: 8,
-                                background: i === 0 ? 'linear-gradient(135deg,#f97316,#ea580c)' : i === 1 ? 'rgba(249,115,22,0.15)' : '#f3f4f6',
-                                color: i === 0 ? '#fff' : i === 1 ? '#f97316' : '#9ca3af',
-                                fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                              }}>{i + 1}</span>
-                              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+                        <div key={t.table_number} style={{ marginBottom: 12 }}>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              marginBottom: 5,
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 8,
+                              }}
+                            >
+                              <span
+                                style={{
+                                  width: 28,
+                                  height: 28,
+                                  borderRadius: 9,
+                                  flexShrink: 0,
+                                  background:
+                                    i === 0
+                                      ? "linear-gradient(135deg,#f97316,#ea580c)"
+                                      : "#f1f5f9",
+                                  color: i === 0 ? "#fff" : "#475569",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  fontSize: 11,
+                                  fontWeight: 900,
+                                }}
+                              >
+                                T{t.table_number}
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: 12,
+                                  color: "#94a3b8",
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {t.orders} order{t.orders !== 1 ? "s" : ""}
+                              </span>
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <span style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>{item.count}</span>
-                              <span style={{ fontSize: 10, color: '#9ca3af' }}>sold</span>
-                              {i === 0 && <span style={{ fontSize: 14 }}>🔥</span>}
-                            </div>
+                            <span
+                              style={{
+                                fontSize: 14,
+                                fontWeight: 800,
+                                color: "#0f172a",
+                              }}
+                            >
+                              {fmtShort(t.revenue)}
+                            </span>
                           </div>
-                          <div style={{ height: 4, background: '#f3f4f6', borderRadius: 100, overflow: 'hidden' }}>
-                            <div style={{
-                              height: '100%', borderRadius: 100, transition: 'width 0.8s ease',
-                              width: `${pct}%`,
-                              background: i === 0 ? 'linear-gradient(90deg,#f97316,#ea580c)' : i === 1 ? 'rgba(249,115,22,0.5)' : 'rgba(249,115,22,0.25)',
-                            }} />
+                          <div
+                            style={{
+                              height: 5,
+                              background: "#f1f5f9",
+                              borderRadius: 100,
+                              overflow: "hidden",
+                            }}
+                          >
+                            <div
+                              className="ts-bar-enter"
+                              style={{
+                                height: "100%",
+                                borderRadius: 100,
+                                background:
+                                  i === 0
+                                    ? "linear-gradient(90deg,#f97316,#ea580c)"
+                                    : "rgba(249,115,22,.22)",
+                                width: `${Math.round((t.revenue / max) * 100)}%`,
+                              }}
+                            />
                           </div>
                         </div>
                       );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Free plan nudge at bottom of top sellers */}
+                    })
+                  )}
+                </CardBody>
+              </Card>
               {!isPro && (
-                <div style={{ margin: '0 16px 16px', padding: '12px 16px', background: 'linear-gradient(135deg, rgba(249,115,22,0.06), rgba(234,88,12,0.04))', border: '1px solid rgba(249,115,22,0.12)', borderRadius: 14 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <Star style={{ width: 16, height: 16, color: '#f97316', flexShrink: 0 }} />
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontSize: 12, fontWeight: 700, color: '#92400e', marginBottom: 2 }}>See all-time bestsellers</p>
-                      <p style={{ fontSize: 11, color: '#b45309' }}>Pro unlocks lifetime sales history & 90-day trends</p>
+                <ProOverlay
+                  title="Revenue by Table"
+                  description="See which tables drive the most revenue and optimize your layout."
+                />
+              )}
+            </div>
+
+            <div style={{ position: "relative" }}>
+              <Card>
+                <CardHead>
+                  <div>
+                    <div
+                      style={{ display: "flex", alignItems: "center", gap: 7 }}
+                    >
+                      <p
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 800,
+                          color: "#0f172a",
+                        }}
+                      >
+                        Category Breakdown
+                      </p>
+                      {!isPro && <ProBadge />}
                     </div>
-                    <Link href="/dashboard/pricing" style={{ fontSize: 11, fontWeight: 700, color: '#f97316', textDecoration: 'none', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>
-                      Upgrade <ChevronRight style={{ width: 12, height: 12 }} />
-                    </Link>
+                    <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+                      Revenue share by menu category
+                    </p>
                   </div>
-                </div>
+                </CardHead>
+                <CardBody
+                  style={{
+                    filter: !isPro ? "blur(3px)" : "none",
+                    pointerEvents: !isPro ? "none" : "auto",
+                  }}
+                >
+                  {stats.categoryBreakdown.length === 0 ? (
+                    <Empty icon={<BarChart3 size={32} />} text="No data yet" />
+                  ) : (
+                    (() => {
+                      const total =
+                        stats.categoryBreakdown.reduce(
+                          (s, c) => s + c.revenue,
+                          0,
+                        ) || 1;
+                      return stats.categoryBreakdown.map((cat, i) => {
+                        const pct = Math.round((cat.revenue / total) * 100);
+                        return (
+                          <div key={cat.name} style={{ marginBottom: 12 }}>
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                marginBottom: 5,
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 7,
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    width: 8,
+                                    height: 8,
+                                    borderRadius: "50%",
+                                    background:
+                                      CAT_COLORS[i % CAT_COLORS.length],
+                                    flexShrink: 0,
+                                  }}
+                                />
+                                <span
+                                  style={{
+                                    fontSize: 13,
+                                    fontWeight: 600,
+                                    color: "#0f172a",
+                                  }}
+                                >
+                                  {cat.name}
+                                </span>
+                              </div>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 8,
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    fontSize: 11,
+                                    color: "#94a3b8",
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  {pct}%
+                                </span>
+                                <span
+                                  style={{
+                                    fontSize: 13,
+                                    fontWeight: 800,
+                                    color: "#0f172a",
+                                  }}
+                                >
+                                  {fmtShort(cat.revenue)}
+                                </span>
+                              </div>
+                            </div>
+                            <div
+                              style={{
+                                height: 5,
+                                background: "#f1f5f9",
+                                borderRadius: 100,
+                                overflow: "hidden",
+                              }}
+                            >
+                              <div
+                                className="ts-bar-enter"
+                                style={{
+                                  height: "100%",
+                                  borderRadius: 100,
+                                  background: CAT_COLORS[i % CAT_COLORS.length],
+                                  width: `${pct}%`,
+                                }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()
+                  )}
+                </CardBody>
+              </Card>
+              {!isPro && (
+                <ProOverlay
+                  title="Category Breakdown"
+                  description="Discover which menu categories drive the most revenue."
+                />
               )}
             </div>
           </div>
 
+          {/* ── SLOW MOVERS ─────────────────────────────────── */}
+          <div style={{ position: "relative", marginBottom: 14 }}>
+            <Card>
+              <CardHead>
+                <div>
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: 7 }}
+                  >
+                    <p
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 800,
+                        color: "#0f172a",
+                      }}
+                    >
+                      Slow Movers
+                    </p>
+                    {!isPro && <ProBadge />}
+                  </div>
+                  <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+                    Least ordered items — last 30 days
+                  </p>
+                </div>
+              </CardHead>
+              <div
+                style={{
+                  filter: !isPro ? "blur(3px)" : "none",
+                  pointerEvents: !isPro ? "none" : "auto",
+                }}
+              >
+                {stats.slowMovers.length === 0 ? (
+                  <Empty
+                    icon={<UtensilsCrossed size={32} />}
+                    text="No data yet"
+                  />
+                ) : (
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))",
+                      gap: 0,
+                      borderTop: "1px solid rgba(0,0,0,.05)",
+                    }}
+                  >
+                    {stats.slowMovers.map((item) => (
+                      <div
+                        key={item.name}
+                        style={{
+                          padding: "14px 18px",
+                          borderRight: "1px solid rgba(0,0,0,.05)",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                            marginBottom: 6,
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: 9,
+                              fontWeight: 800,
+                              padding: "2px 7px",
+                              borderRadius: 100,
+                              background: "#fef2f2",
+                              color: "#dc2626",
+                            }}
+                          >
+                            SLOW
+                          </span>
+                          <span
+                            style={{
+                              fontSize: 10,
+                              color: "#94a3b8",
+                              fontWeight: 600,
+                            }}
+                          >
+                            {item.category}
+                          </span>
+                        </div>
+                        <p
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 700,
+                            color: "#0f172a",
+                            marginBottom: 4,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {item.name}
+                        </p>
+                        <p
+                          style={{
+                            fontSize: 22,
+                            fontWeight: 900,
+                            color: "#dc2626",
+                            lineHeight: 1,
+                          }}
+                        >
+                          {item.count}{" "}
+                          <span
+                            style={{
+                              fontSize: 12,
+                              color: "#94a3b8",
+                              fontWeight: 600,
+                            }}
+                          >
+                            sold
+                          </span>
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </Card>
+            {!isPro && (
+              <ProOverlay
+                title="Slow Mover Report"
+                description="Find dead-weight items dragging down your menu. Remove or reprice to boost average order value."
+              />
+            )}
+          </div>
+
+          {/* ── RECENT ORDERS + TOP SELLERS ─────────────────── */}
+          <div className="ts-grid-2-bottom">
+            <Card>
+              <CardHead>
+                <div>
+                  <p
+                    style={{ fontSize: 14, fontWeight: 800, color: "#0f172a" }}
+                  >
+                    Recent Orders
+                  </p>
+                  <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+                    Latest 5
+                  </p>
+                </div>
+                <Link href="/dashboard/orders" className="ts-view-all">
+                  View all <ChevronRight size={13} />
+                </Link>
+              </CardHead>
+              {recentOrders.length === 0 ? (
+                <Empty icon={<ShoppingBag size={36} />} text="No orders yet" />
+              ) : (
+                recentOrders.slice(0, 5).map((o) => {
+                  const sm = STATUS_META[o.status] || STATUS_META.served;
+                  return (
+                    <div key={o.id} className="ts-order-row">
+                      <div
+                        style={{
+                          width: 36,
+                          height: 36,
+                          borderRadius: 10,
+                          background: "#f8f9fb",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: 12,
+                          fontWeight: 900,
+                          color: "#0f172a",
+                          flexShrink: 0,
+                          border: "1px solid rgba(0,0,0,.06)",
+                        }}
+                      >
+                        T{o.table_number}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 7,
+                            marginBottom: 3,
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: 13,
+                              fontWeight: 700,
+                              color: "#0f172a",
+                            }}
+                          >
+                            Table {o.table_number}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: 10,
+                              color: "#94a3b8",
+                              background: "#f1f5f9",
+                              padding: "2px 7px",
+                              borderRadius: 100,
+                              fontWeight: 600,
+                            }}
+                          >
+                            #{o.order_number}
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 5,
+                          }}
+                        >
+                          <span
+                            style={{
+                              width: 5,
+                              height: 5,
+                              borderRadius: "50%",
+                              background: sm.dot,
+                              flexShrink: 0,
+                            }}
+                          />
+                          <span
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 600,
+                              color: sm.textColor,
+                            }}
+                          >
+                            {sm.label}
+                          </span>
+                          <span style={{ color: "#cbd5e1", fontSize: 11 }}>
+                            ·
+                          </span>
+                          <span style={{ fontSize: 11, color: "#94a3b8" }}>
+                            {formatTime(o.created_at)}
+                          </span>
+                        </div>
+                      </div>
+                      <span
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 800,
+                          color: "#0f172a",
+                          flexShrink: 0,
+                        }}
+                      >
+                        {fmt(o.total)}
+                      </span>
+                    </div>
+                  );
+                })
+              )}
+            </Card>
+
+            <Card>
+              <CardHead>
+                <div>
+                  <p
+                    style={{ fontSize: 14, fontWeight: 800, color: "#0f172a" }}
+                  >
+                    Top Sellers
+                  </p>
+                  <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+                    {PERIOD_CFG[timePeriod].label} bestsellers
+                  </p>
+                </div>
+                <Flame size={15} style={{ color: "#f97316" }} />
+              </CardHead>
+              <CardBody>
+                {stats.topItems.length === 0 ? (
+                  <Empty
+                    icon={<UtensilsCrossed size={32} />}
+                    text="No sales data yet"
+                  />
+                ) : (
+                  stats.topItems.map((item, i) => {
+                    const pct = Math.round(
+                      (item.count / stats.topItems[0].count) * 100,
+                    );
+                    const rankBgs = [
+                      "linear-gradient(135deg,#f97316,#ea580c)",
+                      "rgba(249,115,22,.15)",
+                      "#f1f5f9",
+                      "#f1f5f9",
+                      "#f1f5f9",
+                    ];
+                    const rankColors = [
+                      "#fff",
+                      "#f97316",
+                      "#64748b",
+                      "#94a3b8",
+                      "#94a3b8",
+                    ];
+                    const barBgs = [
+                      "linear-gradient(90deg,#f97316,#ea580c)",
+                      "rgba(249,115,22,.5)",
+                      "rgba(249,115,22,.3)",
+                      "rgba(249,115,22,.2)",
+                      "rgba(249,115,22,.15)",
+                    ];
+                    return (
+                      <div key={item.name} style={{ marginBottom: 14 }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            marginBottom: 6,
+                            gap: 8,
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 10,
+                              minWidth: 0,
+                            }}
+                          >
+                            <span
+                              style={{
+                                width: 24,
+                                height: 24,
+                                borderRadius: 7,
+                                background: rankBgs[i] || rankBgs[4],
+                                color: rankColors[i] || rankColors[4],
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontSize: 10,
+                                fontWeight: 900,
+                                flexShrink: 0,
+                              }}
+                            >
+                              {i + 1}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: 13,
+                                fontWeight: 600,
+                                color: "#0f172a",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                maxWidth: 160,
+                              }}
+                            >
+                              {item.name}
+                            </span>
+                          </div>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 5,
+                              flexShrink: 0,
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontSize: 13,
+                                fontWeight: 800,
+                                color: "#0f172a",
+                              }}
+                            >
+                              {item.count}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: 10,
+                                color: "#94a3b8",
+                                fontWeight: 600,
+                              }}
+                            >
+                              sold
+                            </span>
+                            {i === 0 && (
+                              <span style={{ fontSize: 14 }}>🔥</span>
+                            )}
+                          </div>
+                        </div>
+                        <div
+                          style={{
+                            height: 4,
+                            background: "#f1f5f9",
+                            borderRadius: 100,
+                            overflow: "hidden",
+                          }}
+                        >
+                          <div
+                            className="ts-bar-enter"
+                            style={{
+                              height: "100%",
+                              borderRadius: 100,
+                              background: barBgs[i] || barBgs[4],
+                              width: `${pct}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+                {!isPro && stats.topItems.length > 0 && (
+                  <div
+                    style={{
+                      marginTop: 4,
+                      padding: "11px 13px",
+                      background:
+                        "linear-gradient(135deg,rgba(249,115,22,.04),rgba(234,88,12,.02))",
+                      border: "1px solid rgba(249,115,22,.1)",
+                      borderRadius: 12,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                    }}
+                  >
+                    <Star
+                      size={13}
+                      style={{ color: "#f97316", flexShrink: 0 }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <p
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 800,
+                          color: "#92400e",
+                          marginBottom: 2,
+                        }}
+                      >
+                        See all-time bestsellers
+                      </p>
+                      <p style={{ fontSize: 11, color: "#b45309" }}>
+                        Pro unlocks lifetime sales history
+                      </p>
+                    </div>
+                    <Link
+                      href="/dashboard/pricing"
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 800,
+                        color: "#f97316",
+                        textDecoration: "none",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 3,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Upgrade <ChevronRight size={11} />
+                    </Link>
+                  </div>
+                )}
+              </CardBody>
+            </Card>
+          </div>
         </div>
       </DashboardLayout>
     </ProtectedRoute>

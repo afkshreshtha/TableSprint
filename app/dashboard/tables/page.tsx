@@ -144,8 +144,10 @@ export default function TablesPage() {
         .from("tables")
         .select("*")
         .eq("restaurant_id", restaurant.id)
-        .order("table_number");
-      setTables(tablesData || []);
+
+        .order("created_at", { ascending: true });
+      const allTables = tablesData || [];
+      setTables(allTables);
       setLoading(false);
     };
     init();
@@ -345,7 +347,9 @@ ${
     `);
     printWindow.document.close();
   };
+  const visibleTables = isPro ? tables : tables.slice(0, FREE_TABLE_LIMIT); // oldest 5 due to created_at ASC sort
 
+  const hiddenCount = tables.length - visibleTables.length;
   const tablesAtLimit = !isPro && tables.length >= FREE_TABLE_LIMIT;
 
   if (loading) {
@@ -424,7 +428,7 @@ ${
               <div className="flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 text-orange-500" />
                 <span className="text-sm font-semibold text-gray-700">
-                  Tables ({tables.length}/{FREE_TABLE_LIMIT} free)
+                  Tables ({visibleTables.length}/{FREE_TABLE_LIMIT} shown)
                 </span>
               </div>
               <Link
@@ -436,16 +440,35 @@ ${
             </div>
             <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all duration-500 ${tables.length >= FREE_TABLE_LIMIT ? "bg-orange-500" : "bg-emerald-500"}`}
+                className={`h-full rounded-full transition-all duration-500 ${
+                  tables.length >= FREE_TABLE_LIMIT
+                    ? "bg-orange-500"
+                    : "bg-emerald-500"
+                }`}
                 style={{
-                  width: `${Math.min((tables.length / FREE_TABLE_LIMIT) * 100, 100)}%`,
+                  width: `${Math.min((visibleTables.length / FREE_TABLE_LIMIT) * 100, 100)}%`,
                 }}
               />
             </div>
-            {tables.length >= FREE_TABLE_LIMIT && (
+            {hiddenCount > 0 && (
+              <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-xl flex items-center gap-2">
+                <Lock className="w-4 h-4 text-orange-500 flex-shrink-0" />
+                <p className="text-xs text-orange-700 font-medium">
+                  {hiddenCount} table{hiddenCount > 1 ? "s are" : " is"} hidden
+                  — your subscription has ended.{" "}
+                  <Link
+                    href="/dashboard/pricing"
+                    className="underline font-bold"
+                  >
+                    Resubscribe
+                  </Link>{" "}
+                  to restore access.
+                </p>
+              </div>
+            )}
+            {tables.length >= FREE_TABLE_LIMIT && hiddenCount === 0 && (
               <p className="text-xs text-orange-600 mt-1.5 font-medium">
-                Limit reached · Upgrade to Pro for unlimited tables + custom QR
-                branding
+                Limit reached · Upgrade to Pro for unlimited tables
               </p>
             )}
           </div>
@@ -470,7 +493,7 @@ ${
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {tables.map((table) => (
+            {visibleTables.map((table) => (
               <div
                 key={table.id}
                 className={`group bg-white border rounded-2xl p-5 flex flex-col transition-all duration-200 hover:shadow-md ${table.is_active ? "border-gray-100 hover:border-gray-200" : "border-gray-200 bg-gray-50/50"}`}
@@ -548,12 +571,25 @@ ${
                 <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center mb-3 group-hover:bg-orange-200 transition-colors">
                   <Lock className="w-5 h-5 text-orange-600" />
                 </div>
-                <p className="text-sm font-bold text-orange-700 mb-1">
-                  Add More Tables
-                </p>
-                <p className="text-xs text-orange-500 text-center">
-                  Upgrade for unlimited tables + custom QR branding
-                </p>
+                {hiddenCount > 0 ? (
+                  <>
+                    <p className="text-sm font-bold text-orange-700 mb-1">
+                      +{hiddenCount} Hidden Table{hiddenCount > 1 ? "s" : ""}
+                    </p>
+                    <p className="text-xs text-orange-500 text-center">
+                      Resubscribe to restore all your tables
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-bold text-orange-700 mb-1">
+                      Add More Tables
+                    </p>
+                    <p className="text-xs text-orange-500 text-center">
+                      Upgrade for unlimited tables + custom QR branding
+                    </p>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -1038,11 +1074,14 @@ ${
                 <Lock className="w-7 h-7 text-white" />
               </div>
               <h3 className="text-xl font-extrabold text-gray-900 mb-2">
-                {FREE_TABLE_LIMIT} Table Limit Reached
+                {hiddenCount > 0
+                  ? `${hiddenCount} Tables Hidden`
+                  : `${FREE_TABLE_LIMIT} Table Limit Reached`}
               </h3>
               <p className="text-gray-500 text-sm mb-5 leading-relaxed">
-                Free plan includes up to {FREE_TABLE_LIMIT} tables. Upgrade to
-                Pro for unlimited tables and custom QR branding.
+                {hiddenCount > 0
+                  ? `Your subscription has ended. Resubscribe to Pro to restore your ${hiddenCount} hidden table${hiddenCount > 1 ? "s" : ""} and resume full access.`
+                  : `Free plan includes up to ${FREE_TABLE_LIMIT} tables. Upgrade to Pro for unlimited tables and custom QR branding.`}
               </p>
               <div className="bg-orange-50 rounded-xl p-4 mb-5 text-left space-y-2">
                 {[
