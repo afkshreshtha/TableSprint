@@ -193,7 +193,7 @@ async function sendPushNotification(
       icon: "/favicon.ico",
       badge: "/favicon.ico",
       tag: orderId ?? "dashboard",
-      renotify: true,
+     
     });
     n.onclick = () => {
       window.focus();
