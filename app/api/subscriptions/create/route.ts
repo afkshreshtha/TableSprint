@@ -78,7 +78,9 @@ export async function POST(request: Request) {
 
     const { data: existingSub } = await supabase
       .from("restaurant_subscriptions")
-      .select("razorpay_customer_id")
+      .select(
+        "razorpay_customer_id,status, razorpay_subscription_id, trial_start, trial_end",
+      )
       .eq("restaurant_id", restaurantId)
       .maybeSingle();
 
@@ -194,11 +196,17 @@ export async function POST(request: Request) {
         razorpay_subscription_id: subscription.id,
         razorpay_customer_id: customerId,
         billing_cycle: billingCycle,
-        status: "created",
+
+        // ✅ FIXED: preserve trial status
+        status: existingSub?.status === "trialing" ? "trialing" : "created",
+
         current_period_start: periodStart.toISOString(),
         current_period_end: periodEnd.toISOString(),
-        trial_start: null,
-        trial_end: null,
+
+        // ✅ KEEP trial data (IMPORTANT)
+        trial_start: existingSub?.trial_start,
+        trial_end: existingSub?.trial_end,
+
         updated_at: new Date().toISOString(),
       })
       .eq("restaurant_id", restaurantId);
@@ -208,6 +216,7 @@ export async function POST(request: Request) {
     } else {
       console.log("✅ Subscription saved");
     }
+
 
     const amount =
       billingCycle === "yearly" ? plan.price_yearly : plan.price_monthly;

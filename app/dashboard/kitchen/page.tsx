@@ -1,10 +1,12 @@
-'use client';
+"use client";
 
-import { useEffect, useState, useCallback } from 'react';
-import { Clock, CheckCircle, Timer } from 'lucide-react';
-import { supabase } from '@/lib/supabase/client';
-import ProtectedRoute from '@/lib/utils/protectedRoute';
-import { useStaffRole } from '@/hooks/useStaffrole';
+import { useEffect, useState, useCallback } from "react";
+import { CheckCircle, Timer, Zap, Lock } from "lucide-react";
+import { supabase } from "@/lib/supabase/client";
+import ProtectedRoute from "@/lib/utils/protectedRoute";
+import { useStaffRole } from "@/hooks/useStaffrole";
+import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import Link from "next/link";
 
 interface OrderItem {
   id: string;
@@ -28,13 +30,16 @@ function KitchenDisplay() {
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
 
+  const [isPro, setIsPro] = useState<boolean | null>(null);
+
   const fetchOrders = useCallback(async () => {
     if (!restaurantId) return;
 
     try {
       const { data, error } = await supabase
-        .from('orders')
-        .select(`
+        .from("orders")
+        .select(
+          `
           *,
           order_items (
             id,
@@ -42,15 +47,16 @@ function KitchenDisplay() {
             special_instructions,
             menu_items (name)
           )
-        `)
-        .eq('restaurant_id', restaurantId)        // ← scoped
-        .in('status', ['confirmed', 'preparing'])
-        .order('created_at', { ascending: true });
+        `,
+        )
+        .eq("restaurant_id", restaurantId) // ← scoped
+        .in("status", ["confirmed", "preparing"])
+        .order("created_at", { ascending: true });
 
       if (error) throw error;
       setOrders(data || []);
     } catch (error) {
-      console.error('Error fetching orders:', error);
+      console.error("Error fetching orders:", error);
     } finally {
       setLoading(false);
     }
@@ -64,19 +70,19 @@ function KitchenDisplay() {
     if (!restaurantId) return;
 
     const channel = supabase
-      .channel('kitchen-orders')
+      .channel("kitchen-orders")
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: '*',
-          schema: 'public',
-          table: 'orders',
-          filter: `restaurant_id=eq.${restaurantId}`,  // ← scoped
+          event: "*",
+          schema: "public",
+          table: "orders",
+          filter: `restaurant_id=eq.${restaurantId}`, // ← scoped
         },
         () => {
           fetchOrders();
           playNotificationSound();
-        }
+        },
       )
       .subscribe();
 
@@ -87,16 +93,51 @@ function KitchenDisplay() {
       clearInterval(timeInterval);
     };
   }, [restaurantId, fetchOrders]);
+  useEffect(() => {
+    const init = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
 
+      const { data: restaurant } = await supabase
+        .from("restaurants")
+        .select("id")
+        .eq("owner_id", user.id)
+        .maybeSingle();
+
+      if (!restaurant) return;
+
+      // ── Pro check ──────────────────────────────────────────
+      const { data: sub } = await supabase
+        .from("restaurant_subscriptions")
+        .select("status")
+        .eq("restaurant_id", restaurant.id)
+        .single();
+
+      const proStatuses = ["active", "trialing"];
+      const userIsPro = proStatuses.includes(sub?.status || "");
+      setIsPro(userIsPro);
+
+      if (!userIsPro) {
+        setLoading(false);
+        return; // Don't fetch staff data for free users
+      }
+      // ───────────────────────────────────────────────────────
+    };
+    init();
+  }, []);
   const playNotificationSound = () => {
     try {
-      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const ctx = new (
+        window.AudioContext || (window as any).webkitAudioContext
+      )();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.frequency.value = 800;
-      osc.type = 'sine';
+      osc.type = "sine";
       gain.gain.setValueAtTime(0.3, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
       osc.start(ctx.currentTime);
@@ -107,22 +148,22 @@ function KitchenDisplay() {
   const updateStatus = async (orderId: string, status: string) => {
     try {
       const { error } = await supabase
-        .from('orders')
+        .from("orders")
         .update({ status })
-        .eq('id', orderId)
-        .eq('restaurant_id', restaurantId);       // ← scoped
+        .eq("id", orderId)
+        .eq("restaurant_id", restaurantId); // ← scoped
 
       if (error) throw error;
 
-      await supabase.from('order_status_history').insert({
+      await supabase.from("order_status_history").insert({
         order_id: orderId,
         status,
-        changed_by: 'kitchen',
+        changed_by: "kitchen",
       });
 
       fetchOrders();
     } catch (error) {
-      console.error('Error updating order:', error);
+      console.error("Error updating order:", error);
     }
   };
 
@@ -131,23 +172,23 @@ function KitchenDisplay() {
 
   const getTimeSince = (d: string) => {
     const mins = getAge(d);
-    if (mins < 1) return 'Just now';
-    if (mins === 1) return '1 min ago';
+    if (mins < 1) return "Just now";
+    if (mins === 1) return "1 min ago";
     return `${mins} mins ago`;
   };
 
   const getBorderColor = (d: string) => {
     const age = getAge(d);
-    if (age > 15) return 'border-red-500 bg-red-50';
-    if (age > 10) return 'border-yellow-500 bg-yellow-50';
-    return 'border-green-500 bg-white';
+    if (age > 15) return "border-red-500 bg-red-50";
+    if (age > 10) return "border-yellow-500 bg-yellow-50";
+    return "border-green-500 bg-white";
   };
 
   const getTimerColor = (d: string) => {
     const age = getAge(d);
-    if (age > 15) return 'text-red-500';
-    if (age > 10) return 'text-yellow-500';
-    return 'text-green-500';
+    if (age > 15) return "text-red-500";
+    if (age > 10) return "text-yellow-500";
+    return "text-green-500";
   };
 
   if (loading) {
@@ -161,21 +202,75 @@ function KitchenDisplay() {
     );
   }
 
+  if (isPro === false) {
+    return (
+      <ProtectedRoute allowedRoles={["owner"]}>
+        <DashboardLayout>
+          <div className="max-w-lg mx-auto mt-16 text-center px-4">
+            <div className="w-16 h-16 bg-orange-100 rounded-2xl flex items-center justify-center mx-auto mb-5">
+              <Lock className="w-8 h-8 text-orange-600" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              Pro Feature
+            </h2>
+            <p className="text-gray-500 mb-2">
+              Staff management is available on the <strong>Pro plan</strong>.
+            </p>
+            <p className="text-gray-400 text-sm mb-8">
+              Add chef accounts so your kitchen staff can access the Kitchen
+              Display without seeing your full dashboard.
+            </p>
+            <div className="bg-orange-50 border border-orange-200 rounded-2xl p-5 mb-6 text-left space-y-2.5">
+              {[
+                "Add unlimited chef accounts",
+                "Chefs only see Kitchen Display",
+                "Remove staff anytime",
+                "Secure Google login for each chef",
+              ].map((f) => (
+                <div
+                  key={f}
+                  className="flex items-center gap-2 text-sm text-orange-800"
+                >
+                  <Zap className="w-4 h-4 text-orange-500 flex-shrink-0" />
+                  {f}
+                </div>
+              ))}
+            </div>
+            <Link
+              href="/dashboard/pricing"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-orange-600 text-white rounded-xl font-semibold hover:bg-orange-700 transition-colors"
+            >
+              <Zap className="w-5 h-5" />
+              Upgrade to Pro
+            </Link>
+            <p className="text-xs text-gray-400 mt-3">
+              Start with a 14-day free trial · No credit card required
+            </p>
+          </div>
+        </DashboardLayout>
+      </ProtectedRoute>
+    );
+  }
   return (
     <div className="min-h-screen bg-gray-900 p-6">
       {/* Header */}
       <div className="bg-gradient-to-r from-orange-600 to-orange-700 rounded-lg p-6 mb-6 shadow-lg">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-white mb-2">Kitchen Display</h1>
+            <h1 className="text-3xl font-bold text-white mb-2">
+              Kitchen Display
+            </h1>
             <p className="text-orange-100">
-              {orders.length} active {orders.length === 1 ? 'order' : 'orders'}
+              {orders.length} active {orders.length === 1 ? "order" : "orders"}
             </p>
           </div>
           <div className="text-right">
             <p className="text-orange-100 text-sm mb-1">Current Time</p>
             <p className="text-3xl font-bold text-white">
-              {currentTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+              {currentTime.toLocaleTimeString("en-IN", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
             </p>
           </div>
         </div>
@@ -185,12 +280,14 @@ function KitchenDisplay() {
         <div className="bg-gray-800 rounded-lg p-16 text-center">
           <CheckCircle className="w-24 h-24 text-green-500 mx-auto mb-6" />
           <h2 className="text-3xl font-bold text-white mb-3">All Caught Up!</h2>
-          <p className="text-gray-400 text-xl">No pending orders at the moment</p>
+          <p className="text-gray-400 text-xl">
+            No pending orders at the moment
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {orders.map((order) => {
-            const isPreparing = order.status === 'preparing';
+            const isPreparing = order.status === "preparing";
 
             return (
               <div
@@ -201,13 +298,21 @@ function KitchenDisplay() {
                 <div className="bg-gray-800 p-6 border-b-4 border-gray-700">
                   <div className="flex items-center justify-between mb-3">
                     <div className="bg-orange-600 px-4 py-2 rounded-lg">
-                      <p className="text-white font-bold text-2xl">TABLE {order.table_number}</p>
+                      <p className="text-white font-bold text-2xl">
+                        TABLE {order.table_number}
+                      </p>
                     </div>
                     <div className="text-right">
-                      <p className="text-gray-400 text-sm mb-1">#{order.order_number}</p>
+                      <p className="text-gray-400 text-sm mb-1">
+                        #{order.order_number}
+                      </p>
                       <div className="flex items-center space-x-2">
-                        <Timer className={`w-5 h-5 ${getTimerColor(order.created_at)}`} />
-                        <p className={`font-bold ${getTimerColor(order.created_at)}`}>
+                        <Timer
+                          className={`w-5 h-5 ${getTimerColor(order.created_at)}`}
+                        />
+                        <p
+                          className={`font-bold ${getTimerColor(order.created_at)}`}
+                        >
                           {getTimeSince(order.created_at)}
                         </p>
                       </div>
@@ -223,14 +328,21 @@ function KitchenDisplay() {
                 {/* Items */}
                 <div className="p-6 space-y-4">
                   {order.order_items.map((item) => (
-                    <div key={item.id} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <div
+                      key={item.id}
+                      className="bg-gray-50 p-4 rounded-lg border border-gray-200"
+                    >
                       <p className="text-2xl font-bold text-gray-900 mb-2">
                         {item.quantity}x {item.menu_items.name}
                       </p>
                       {item.special_instructions && (
                         <div className="bg-yellow-100 border-l-4 border-yellow-500 p-3 rounded">
-                          <p className="text-sm font-semibold text-yellow-800 mb-1">Special Instructions:</p>
-                          <p className="text-yellow-900">{item.special_instructions}</p>
+                          <p className="text-sm font-semibold text-yellow-800 mb-1">
+                            Special Instructions:
+                          </p>
+                          <p className="text-yellow-900">
+                            {item.special_instructions}
+                          </p>
                         </div>
                       )}
                     </div>
@@ -241,14 +353,14 @@ function KitchenDisplay() {
                 <div className="p-6 bg-gray-50 border-t-4 border-gray-200">
                   {isPreparing ? (
                     <button
-                      onClick={() => updateStatus(order.id, 'ready')}
+                      onClick={() => updateStatus(order.id, "ready")}
                       className="w-full bg-green-600 hover:bg-green-700 text-white py-6 rounded-xl text-2xl font-bold transition-colors shadow-lg"
                     >
                       MARK READY ✓
                     </button>
                   ) : (
                     <button
-                      onClick={() => updateStatus(order.id, 'preparing')}
+                      onClick={() => updateStatus(order.id, "preparing")}
                       className="w-full bg-orange-600 hover:bg-orange-700 text-white py-6 rounded-xl text-2xl font-bold transition-colors shadow-lg"
                     >
                       START PREPARING
@@ -267,7 +379,7 @@ function KitchenDisplay() {
 export default function KitchenPage() {
   return (
     // Both owner and chef can access kitchen
-    <ProtectedRoute allowedRoles={['owner', 'chef']}>
+    <ProtectedRoute allowedRoles={["owner", "chef"]}>
       <KitchenDisplay />
     </ProtectedRoute>
   );
