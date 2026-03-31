@@ -618,7 +618,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-orange-50 border border-orange-100 rounded-full">
               <div className="w-5 h-5 rounded-full bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center shrink-0">
                 <span className="text-white text-[8px] font-black leading-none">
-                  {getInitials(restaurantName)}
+             {getInitials(restaurantName ?? "R")}
                 </span>
               </div>
               <span className="text-sm font-semibold text-orange-700 max-w-[160px] truncate">
