@@ -637,6 +637,7 @@ export type Database = {
           trial_end: string | null
           trial_start: string | null
           updated_at: string | null
+          trial_used: boolean | null
         }
         Insert: {
           billing_cycle?: string | null

@@ -82,7 +82,7 @@ export async function POST(req: Request) {
       message: "Trial started successfully",
       trialEnd,
     });
-  } catch (err: any) {
+  } catch (err) {
     return NextResponse.json(
       { error: err.message || "Something went wrong" },
       { status: 500 }
