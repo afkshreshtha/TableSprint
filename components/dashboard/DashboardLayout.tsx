@@ -468,7 +468,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             {/* Avatar with initials */}
             <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center shrink-0">
               <span className="text-white font-bold text-sm leading-none">
-                {getInitials(restaurantName)}
+                {getInitials(restaurantName ?? "R")}
               </span>
             </div>
             <div className="flex-1 min-w-0">
