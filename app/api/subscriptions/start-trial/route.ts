@@ -4,7 +4,7 @@ import type { Database } from "@/types/supabase";
 
 const supabase = createClient<Database>(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! // server-side only
+  process.env.SUPABASE_SERVICE_ROLE_KEY!, // server-side only
 );
 
 export async function POST(req: Request) {
@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     if (!restaurantId) {
       return NextResponse.json(
         { error: "Restaurant ID required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -28,14 +28,14 @@ export async function POST(req: Request) {
     if (subError) {
       return NextResponse.json(
         { error: "Subscription not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
     if (sub?.trial_used) {
       return NextResponse.json(
         { error: "Trial already used" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
     if (!proPlan || planError) {
       return NextResponse.json(
         { error: "Pro plan not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -74,7 +74,7 @@ export async function POST(req: Request) {
     if (updateError) {
       return NextResponse.json(
         { error: "Failed to start trial" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -83,9 +83,7 @@ export async function POST(req: Request) {
       trialEnd,
     });
   } catch (err) {
-    return NextResponse.json(
-      { error: err.message || "Something went wrong" },
-      { status: 500 }
-    );
+    const message = err instanceof Error ? err.message : "Something went wrong";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
