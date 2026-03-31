@@ -205,7 +205,7 @@ export default function SettingsPage() {
                   URL Slug
                 </label>
                 <div className="flex items-center">
-                  <span className="text-gray-500 mr-2">tablesprint.com/r/</span>
+                  <span className="text-gray-500 mr-2">tabrova.com/r/</span>
                   <input
                     type="text"
                     value={form.slug}

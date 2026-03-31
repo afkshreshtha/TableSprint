@@ -14,17 +14,43 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// In your app/layout.tsx or landing page
-export const metadata = {
-  title: 'TableSprint — QR Ordering System for Restaurants',
+export const metadata: Metadata = {
+  title: 'Tabrova — QR Ordering System for Restaurants',
   description: 'Let customers scan, order and pay from their table. No app needed. Free to start.',
   keywords: 'restaurant QR ordering, table ordering system, restaurant management',
+
+  metadataBase: new URL('https://tabrova.com'), // ✅ Required for absolute OG URLs
+
   openGraph: {
-    title: 'TableSprint — QR Ordering for Restaurants',
+    title: 'Tabrova — QR Ordering for Restaurants',
     description: 'Let customers scan, order and pay from their table.',
-    url: 'https://tablesprint.com',
-    siteName: 'TableSprint',
+    url: 'https://tabrova.com',
+    siteName: 'Tabrova',
     type: 'website',
+    images: [                                       // ✅ OG image (critical for link previews)
+      {
+        url: '/tabrova-logo.png',                       // 1200×630px recommended
+        width: 1200,
+        height: 630,
+        alt: 'Tabrova QR Ordering System',
+      },
+    ],
+  },
+
+  twitter: {                                        // ✅ Twitter/X card
+    card: 'summary_large_image',
+    title: 'Tabrova — QR Ordering for Restaurants',
+    description: 'Let customers scan, order and pay from their table.',
+    images: ['/og-image.png'],
+  },
+
+  robots: {                                         // ✅ Search engine directives
+    index: true,
+    follow: true,
+  },
+
+  alternates: {
+    canonical: 'https://tabrova.com',           // ✅ Prevents duplicate content issues
   },
 }
 

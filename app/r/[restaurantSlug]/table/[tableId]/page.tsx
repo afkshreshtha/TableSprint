@@ -3,6 +3,7 @@ import { getRestaurantBySlug } from "@/services/restaurantService";
 import { getTableByNumber } from "@/services/tableServices";
 import { getRestaurantMenu } from "@/services/menuServices";
 import TableClient from "./TableClient";
+import type { Metadata } from "next";
 
 interface Props {
   params: {
@@ -11,15 +12,20 @@ interface Props {
   };
 }
 
-export async function generateMetadata({ params }: Props) {
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { restaurantSlug, tableId } = await params;
   const restaurant = await getRestaurantBySlug(restaurantSlug);
+
   return {
-    title: `Order at ${restaurant.name}`,
-    description: `Scan to view menu and place your order at ${restaurant.name}`,
-    robots: "noindex", // Don't want individual table pages indexed
+    title: `Order at ${restaurant?.name ?? "Restaurant"}`,
+    description: `Scan to view menu and place your order at ${restaurant?.name ?? "this restaurant"}`,
+    robots: {
+      index: false, // ✅ Correct typed format instead of raw string
+      follow: false,
+    },
   };
 }
+
 export default async function Page({ params }: Props) {
   const { restaurantSlug, tableId } = await params;
 
