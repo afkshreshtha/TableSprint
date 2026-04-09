@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   UtensilsCrossed,
@@ -10,11 +10,23 @@ import {
   Smartphone,
   CheckCircle,
   ArrowRight,
-  Zap,
-  Star,
-  ChevronDown,
+  Sparkles,
+  LayoutDashboard,
+  ShoppingBag,
+  Utensils,
+  Grid,
+  History,
+  Users,
+  Palette,
+  CreditCard,
+  Settings,
+  DollarSign,
+  ChefHat,
+  Bell,
   Menu,
   X,
+  Star,
+  Zap,
 } from "lucide-react";
 import { useAuth } from "@/contexts/authContext";
 import { supabase } from "@/lib/supabase/client";
@@ -32,49 +44,6 @@ interface Plan {
   badge?: string;
 }
 
-/* ── Animated counter ── */
-function useCounter(end: number, duration = 1500, start = false) {
-  const [count, setCount] = useState(0);
-  useEffect(() => {
-    if (!start) return;
-    let startTime: number;
-    const step = (timestamp: number) => {
-      if (!startTime) startTime = timestamp;
-      const progress = Math.min((timestamp - startTime) / duration, 1);
-      setCount(Math.floor(progress * end));
-      if (progress < 1) requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
-  }, [end, duration, start]);
-  return count;
-}
-
-/* ── Stat item ── */
-function StatItem({
-  value,
-  suffix,
-  label,
-  start,
-}: {
-  value: number;
-  suffix: string;
-  label: string;
-  start: boolean;
-}) {
-  const count = useCounter(value, 1800, start);
-  return (
-    <div className="py-7 px-6 text-center border-r border-white/[0.07] last:border-r-0">
-      <span className="block font-['Sora'] text-4xl font-extrabold text-orange-500">
-        {count}
-        {suffix}
-      </span>
-      <span className="block text-sm text-white/40 mt-1 font-medium">
-        {label}
-      </span>
-    </div>
-  );
-}
-
 /* ── Main ── */
 export default function HomePage() {
   const { user, loading } = useAuth();
@@ -83,8 +52,6 @@ export default function HomePage() {
   const [plansLoading, setPlansLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const [statsVisible, setStatsVisible] = useState(false);
-  const statsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!loading && user) router.push("/dashboard");
@@ -104,18 +71,6 @@ export default function HomePage() {
     };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, []);
-
-  /* Stats intersection observer */
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) setStatsVisible(true);
-      },
-      { threshold: 0.3 },
-    );
-    if (statsRef.current) observer.observe(statsRef.current);
-    return () => observer.disconnect();
   }, []);
 
   /* Fetch plans from Supabase */
@@ -155,345 +110,605 @@ export default function HomePage() {
 
   if (loading)
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="w-11 h-11 border-[3px] border-slate-100 border-t-orange-500 rounded-full animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="w-10 h-10 border-2 border-slate-200 border-t-orange-500 rounded-full animate-spin" />
       </div>
     );
   if (user) return null;
 
   return (
-    <div className="font-['DM_Sans'] text-slate-900 bg-white overflow-x-hidden">
+    <div className="font-['DM_Sans'] text-slate-900 bg-[#FAFAFA] overflow-x-hidden selection:bg-orange-500/30">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600&display=swap');
         @keyframes fadeUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes barGrow { from { height: 0; } }
-        @keyframes bounce { 0%,100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(6px); } }
+        @keyframes float { 0%,100% { transform: translateY(0px); } 50% { transform: translateY(-10px); } }
         @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .fade-up { animation: fadeUp 0.6s ease both; }
-        .bar-grow { animation: barGrow 0.6s ease both; }
+        .fade-up { animation: fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) both; }
+        .bar-grow { animation: barGrow 0.8s cubic-bezier(0.16, 1, 0.3, 1) both; }
         .skeleton { background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%); background-size: 200% 100%; animation: shimmer 1.4s ease-in-out infinite; }
-        .gradient-text { background: linear-gradient(135deg, #f97316 0%, #ec4899 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-        .hero-grid { background-image: linear-gradient(rgba(249,115,22,.04) 1px, transparent 1px), linear-gradient(90deg, rgba(249,115,22,.04) 1px, transparent 1px); background-size: 48px 48px; }
-        .mobile-menu-enter { animation: fadeUp 0.2s ease both; }
+        .gradient-text { background: linear-gradient(to right, #f97316, #f43f5e); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .grid-bg { background-image: radial-gradient(rgba(15, 23, 42, 0.08) 1px, transparent 1px); background-size: 32px 32px; }
+        .glass-panel { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.5); }
+        .te-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .te-scrollbar::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 4px; }
       `}</style>
 
-      {/* ── Nav ── */}
+      {/* ── Modern Floating Nav ── */}
       <nav
-        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? "bg-white/90 backdrop-blur-xl shadow-[0_1px_0_rgba(0,0,0,0.08)]" : ""}`}
+        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 pt-4 px-4 ${
+          scrolled ? "translate-y-0" : "translate-y-2"
+        }`}
       >
-        <div className="max-w-[1160px] mx-auto px-5">
-          <div className="flex items-center justify-between h-16 gap-4">
-            {/* Logo */}
-            <Link href="/" className="flex items-center gap-2 shrink-0">
-              <div className="relative w-30 h-30 rounded-xl overflow-hidden flex items-center justify-center">
-                <Image
-                  src="/tabrova-logo.png"
-                  alt="Tabrova"
-                  width={100}
-                  height={100}
-                  className="object-contain w-full h-full"
-                />
-              </div>
-              {/* <span className="font-['Sora'] text-lg font-extrabold text-slate-900 hidden sm:block">Tabrova</span> */}
-            </Link>
-
-            {/* Desktop nav links */}
-            <div className="hidden md:flex items-center gap-7">
-              {["#features", "#pricing", "/about", "/contact"].map(
-                (href, i) => (
-                  <a
-                    key={href}
-                    href={href}
-                    className="font-['Sora'] text-sm font-medium text-slate-600 hover:text-orange-500 transition-colors"
-                  >
-                    {["Features", "Pricing", "About", "Contact"][i]}
-                  </a>
-                ),
-              )}
+        <div
+          className={`max-w-5xl mx-auto transition-all duration-300 rounded-2xl ${
+            scrolled
+              ? "glass-panel shadow-sm px-4 py-2"
+              : "bg-transparent px-2 py-2"
+          } flex items-center justify-between`}
+        >
+          {/* Logo */}
+          <Link href="/" className="flex items-center gap-2">
+            <div className="relative w-30  h-10 rounded-xl overflow-hidden  flex items-center justify-center">
+              <Image
+                src="/tabrova-logo.png"
+                alt="Tabrova"
+                width={100}
+                height={100}
+                className="object-contain w-full h-full"
+              />
             </div>
+          </Link>
 
-            {/* Desktop actions */}
-            <div className="hidden md:flex items-center gap-2">
+          {/* Desktop nav links */}
+          {/* Desktop nav links */}
+          <div className="hidden md:flex items-center bg-white/50 backdrop-blur-md rounded-full px-6 py-2 shadow-[inset_0_1px_1px_rgba(255,255,255,1)] ring-1 ring-slate-900/5">
+            {[
+              { label: "Features", href: "#features" },
+              { label: "Pricing", href: "#pricing" },
+              { label: "About", href: "/about" },
+              { label: "Contact", href: "/contact" },
+            ].map((item) => (
+              <Link
+                key={item.label}
+                href={item.href}
+                className="font-['Sora'] text-sm font-medium text-slate-600 hover:text-slate-900 px-4 transition-colors"
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
+
+          {/* Desktop actions */}
+          <div className="hidden md:flex items-center gap-3">
+            <Link
+              href="/login"
+              className="font-['Sora'] text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
+            >
+              Log in
+            </Link>
+            <Link
+              href="/signup"
+              className="font-['Sora'] text-sm font-semibold bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl transition-all shadow-[0_2px_10px_rgba(0,0,0,0.1)]"
+            >
+              Get Started
+            </Link>
+          </div>
+
+          {/* Hamburger */}
+          <button
+            className="md:hidden flex items-center justify-center w-10 h-10 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors"
+            onClick={() => setMobileMenuOpen((prev) => !prev)}
+          >
+            {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+        </div>
+
+        {/* Mobile menu */}
+        {mobileMenuOpen && (
+          <div className="md:hidden absolute top-full mt-2 left-4 right-4 glass-panel rounded-2xl shadow-xl border border-white p-4">
+            <div className="flex flex-col gap-2">
+              {[
+                { label: "Features", href: "#features" },
+                { label: "Pricing", href: "#pricing" },
+                { label: "About", href: "/about" },
+                { label: "Contact", href: "/contact" },
+              ].map((item) => (
+                <Link
+                  key={item.label}
+                  href={item.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="font-['Sora'] text-sm font-medium text-slate-700 p-3 rounded-lg hover:bg-slate-50 transition-colors"
+                >
+                  {item.label}
+                </Link>
+              ))}
+              <div className="h-px bg-slate-200 my-2" />
               <Link
                 href="/login"
-                className="font-['Sora'] text-sm font-semibold text-slate-600 hover:text-orange-500 px-4 py-2 rounded-lg transition-colors"
+                onClick={() => setMobileMenuOpen(false)}
+                className="font-['Sora'] text-sm font-medium text-slate-700 p-3 text-center"
               >
-                Login
+                Log in
               </Link>
               <Link
                 href="/signup"
-                className="font-['Sora'] text-sm font-semibold bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg transition-all shadow-[0_4px_16px_rgba(249,115,22,0.35)] hover:shadow-[0_6px_22px_rgba(249,115,22,0.4)] hover:-translate-y-px"
+                onClick={() => setMobileMenuOpen(false)}
+                className="font-['Sora'] text-sm font-semibold bg-slate-900 text-white p-3 rounded-xl text-center"
               >
-                Get Started
+                Get Started Free
               </Link>
-            </div>
-
-            {/* Hamburger */}
-            <button
-              className="md:hidden flex items-center justify-center w-10 h-10 rounded-lg text-slate-700 hover:bg-slate-100 transition-colors"
-              onClick={() => setMobileMenuOpen((prev) => !prev)}
-              aria-label="Toggle menu"
-            >
-              {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
-            </button>
-          </div>
-        </div>
-
-        {/* Mobile menu — rendered below nav bar */}
-        {mobileMenuOpen && (
-          <div className="md:hidden mobile-menu-enter bg-white border-t border-slate-100 shadow-lg">
-            <div className="flex flex-col px-5 pt-2 pb-5">
-              {[
-                { href: "#features", label: "Features" },
-                { href: "#pricing", label: "Pricing" },
-                { href: "#stats", label: "About" },
-                { href: "#contact", label: "Contact" },
-              ].map(({ href, label }) => (
-                <a
-                  key={href}
-                  href={href}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="font-['Sora'] text-[15px] font-medium text-slate-700 py-3 border-b border-slate-100 hover:text-orange-500 transition-colors"
-                >
-                  {label}
-                </a>
-              ))}
-              <div className="flex flex-col gap-2.5 mt-4">
-                <Link
-                  href="/login"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="font-['Sora'] text-sm font-semibold text-slate-700 border border-slate-200 hover:border-orange-400 hover:text-orange-500 py-3 rounded-lg text-center transition-all"
-                >
-                  Login
-                </Link>
-                <Link
-                  href="/signup"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="font-['Sora'] text-sm font-semibold bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-lg text-center transition-colors shadow-[0_4px_16px_rgba(249,115,22,0.35)]"
-                >
-                  Get Started Free
-                </Link>
-              </div>
             </div>
           </div>
         )}
       </nav>
 
-      {/* ── Hero ── */}
-      <section className="min-h-screen pt-24 pb-16 relative overflow-hidden bg-gradient-to-br from-orange-50 via-white to-blue-50/30 flex flex-col items-center">
-        {/* Background blobs */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="hero-grid absolute inset-0" />
-          <div className="absolute w-[500px] h-[500px] rounded-full blur-[80px] opacity-50 bg-[radial-gradient(circle,rgba(249,115,22,0.15)_0%,transparent_70%)] -top-24 -right-24" />
-          <div className="absolute w-[400px] h-[400px] rounded-full blur-[80px] opacity-50 bg-[radial-gradient(circle,rgba(99,102,241,0.1)_0%,transparent_70%)] bottom-0 -left-20" />
-        </div>
+      {/* ── Hero Section ── */}
+      <section className="relative pt-36 pb-20 sm:pt-48 sm:pb-32 overflow-hidden px-5">
+        {/* Abstract Background Elements */}
+        <div className="absolute inset-0 grid-bg opacity-40" />
+        <div className="absolute top-[-10%] left-[50%] translate-x-[-50%] w-[800px] h-[600px] bg-orange-400/20 rounded-full blur-[120px] pointer-events-none" />
+        <div className="absolute top-[20%] left-[-10%] w-[400px] h-[400px] bg-rose-400/10 rounded-full blur-[100px] pointer-events-none" />
 
-        <div className="relative z-10 max-w-[1160px] mx-auto px-5 text-center w-full">
-          {/* Badge */}
+        <div className="relative z-10 max-w-5xl mx-auto text-center flex flex-col items-center">
+          {/* Pill Badge */}
           <div
-            className="fade-up inline-flex items-center gap-1.5 bg-orange-50 text-orange-500 font-['Sora'] text-xs font-bold px-3 py-1.5 rounded-full border border-orange-200/50 mb-4"
+            className="fade-up inline-flex items-center gap-2 bg-white/60 backdrop-blur-sm border border-orange-500/20 text-orange-600 font-['Sora'] text-xs font-semibold px-4 py-2 rounded-full mb-8 shadow-sm"
             style={{ animationDelay: "0ms" }}
           >
-            <Zap size={12} /> New — QR ordering now with UPI payments
+            <Sparkles size={14} className="text-orange-500" />
+            <span>Tabrova is here — UPI QR ordering now live</span>
           </div>
 
           <h1
-            className="fade-up font-['Sora'] font-extrabold text-slate-900 leading-[1.1] tracking-tight mb-5"
+            className="fade-up font-['Sora'] font-extrabold text-slate-900 leading-[1.05] tracking-tight mb-6 max-w-4xl"
             style={{
-              fontSize: "clamp(36px, 6vw, 68px)",
-              animationDelay: "80ms",
+              fontSize: "clamp(42px, 7vw, 80px)",
+              animationDelay: "100ms",
             }}
           >
-            Run your restaurant
-            <br />
-            <span className="gradient-text">smarter, not harder</span>
+            The operating system for <br className="hidden sm:block" />
+            <span className="gradient-text">modern restaurants</span>
           </h1>
 
           <p
-            className="fade-up text-slate-500 max-w-[540px] mx-auto mb-8 leading-relaxed"
+            className="fade-up text-slate-500 max-w-2xl mx-auto mb-10 leading-relaxed font-medium"
             style={{
-              fontSize: "clamp(16px, 2vw, 19px)",
-              animationDelay: "160ms",
+              fontSize: "clamp(16px, 2vw, 20px)",
+              animationDelay: "200ms",
             }}
           >
-            QR menus, live kitchen display, and real-time analytics — all in one
-            platform built for Indian restaurants.
+            Replace your clunky legacy POS. Manage QR menus, kitchen displays,
+            table analytics, and real-time payments from one beautiful
+            dashboard.
           </p>
 
           <div
-            className="fade-up flex items-center justify-center gap-3 flex-wrap mb-5"
-            style={{ animationDelay: "240ms" }}
+            className="fade-up flex flex-col sm:flex-row items-center justify-center gap-4 w-full sm:w-auto mb-6"
+            style={{ animationDelay: "300ms" }}
           >
             <Link
               href="/signup"
-              className="inline-flex items-center gap-2 font-['Sora'] text-[15px] font-semibold bg-orange-500 hover:bg-orange-600 text-white px-7 py-4 rounded-xl transition-all shadow-[0_4px_16px_rgba(249,115,22,0.35)] hover:shadow-[0_6px_22px_rgba(249,115,22,0.4)] hover:-translate-y-0.5 sm:w-auto w-full justify-center"
+              className="group relative inline-flex items-center justify-center gap-2 font-['Sora'] text-[15px] font-semibold bg-slate-900 text-white px-8 py-4 rounded-xl transition-all hover:bg-slate-800 w-full sm:w-auto overflow-hidden shadow-[0_8px_30px_rgba(15,23,42,0.2)] hover:shadow-[0_12px_40px_rgba(15,23,42,0.3)] hover:-translate-y-0.5"
             >
-              Start free trial <ArrowRight size={16} />
+              <div className="absolute inset-0 bg-gradient-to-r from-orange-500/20 to-rose-500/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+              Start for free{" "}
+              <ArrowRight
+                size={16}
+                className="group-hover:translate-x-1 transition-transform"
+              />
             </Link>
             <Link
-              href="/login"
-              className="inline-flex items-center gap-2 font-['Sora'] text-[15px] font-semibold border-[1.5px] border-slate-200 hover:border-orange-400 hover:text-orange-500 hover:bg-orange-50 text-slate-700 px-7 py-4 rounded-xl transition-all sm:w-auto w-full justify-center"
+              href="#features"
+              className="inline-flex items-center justify-center gap-2 font-['Sora'] text-[15px] font-semibold bg-white border border-slate-200 hover:border-slate-300 text-slate-700 px-8 py-4 rounded-xl transition-all w-full sm:w-auto shadow-sm hover:shadow-md"
             >
-              Login to dashboard
+              <LayoutDashboard size={16} className="text-slate-400" />
+              Explore features
             </Link>
           </div>
 
-          <p
-            className="fade-up flex items-center justify-center gap-2 text-[13px] text-slate-500 flex-wrap mb-12"
-            style={{ animationDelay: "320ms" }}
-          >
-            <CheckCircle size={13} className="text-emerald-500" /> Free 14-day
-            trial
-            <span className="text-slate-300">·</span>
-            <CheckCircle size={13} className="text-emerald-500" /> No credit
-            card
-            <span className="text-slate-300">·</span>
-            <CheckCircle size={13} className="text-emerald-500" /> Setup in 5
-            min
-          </p>
-
-          {/* Dashboard preview */}
           <div
-            className="fade-up bg-slate-900 rounded-[18px] overflow-hidden shadow-[0_32px_80px_rgba(0,0,0,0.25)] border border-white/[0.08] max-w-[800px] mx-auto w-full"
+            className="fade-up flex flex-wrap justify-center items-center gap-4 text-sm font-medium text-slate-500"
             style={{ animationDelay: "400ms" }}
           >
-            {/* Traffic lights */}
-            <div className="bg-slate-800 px-4 py-3 flex gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-500" />
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+            <div className="flex items-center gap-1.5">
+              <CheckCircle size={16} className="text-emerald-500" /> No credit
+              card
             </div>
-            <div className="flex h-[220px] sm:h-[280px]">
-              {/* Sidebar — hidden on mobile */}
-              <div className="hidden sm:flex w-[140px] bg-slate-800 p-4 flex-col gap-1 shrink-0">
-                {["Dashboard", "Orders", "Menu", "Analytics", "Tables"].map(
-                  (item, i) => (
-                    <div
-                      key={item}
-                      className={`flex items-center gap-2 px-2.5 py-2 rounded-lg ${i === 0 ? "bg-orange-500/15" : ""}`}
-                    >
-                      <div
-                        className={`w-1.5 h-1.5 rounded-full ${i === 0 ? "bg-orange-500" : "bg-white/20"}`}
-                      />
-                      <span
-                        className={`font-['Sora'] text-[11px] ${i === 0 ? "text-orange-400" : "text-white/50"}`}
-                      >
-                        {item}
-                      </span>
-                    </div>
-                  ),
-                )}
-              </div>
+            <div className="hidden sm:block w-1 h-1 rounded-full bg-slate-300" />
+            <div className="flex items-center gap-1.5">
+              <CheckCircle size={16} className="text-emerald-500" /> 14-day free
+              trial
+            </div>
+            <div className="hidden sm:block w-1 h-1 rounded-full bg-slate-300" />
+            <div className="flex items-center gap-1.5">
+              <CheckCircle size={16} className="text-emerald-500" /> Cancel
+              anytime
+            </div>
+          </div>
+        </div>
 
-              {/* Main area */}
-              <div className="flex-1 p-4 overflow-hidden flex flex-col">
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3.5">
+        {/* ── REALISTIC TABROVA DASHBOARD MOCKUP ── */}
+        <div
+          className="fade-up relative z-20 max-w-[1100px] mx-auto mt-20"
+          style={{ animationDelay: "500ms" }}
+        >
+          <div className="absolute -inset-1 bg-gradient-to-b from-orange-500/15 to-transparent rounded-[24px] blur-xl opacity-60" />
+
+          <div
+            className="relative bg-white rounded-[20px] border border-slate-200 shadow-[0_40px_100px_-20px_rgba(0,0,0,0.15)] overflow-hidden flex flex-col h-[600px]"
+            style={{ animation: "float 6s ease-in-out infinite" }}
+          >
+            {/* macOS Window Controls */}
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100 bg-slate-50 shrink-0">
+              <div className="w-3 h-3 rounded-full bg-[#ff5f56]" />
+              <div className="w-3 h-3 rounded-full bg-[#ffbd2e]" />
+              <div className="w-3 h-3 rounded-full bg-[#27c93f]" />
+            </div>
+
+            {/* Mockup Body */}
+            <div className="flex flex-1 overflow-hidden">
+              {/* ── Sidebar ── */}
+              <div className="hidden sm:flex w-[240px] bg-white border-r border-slate-100 flex-col shrink-0">
+                {/* Logo Area */}
+                <div className="p-5 flex items-center gap-2">
+                  <div className="relative w-30  h-10 rounded-xl overflow-hidden  flex items-center justify-center">
+                    <Image
+                      src="/tabrova-logo.png"
+                      alt="Tabrova"
+                      width={100}
+                      height={100}
+                      className="object-contain w-full h-full"
+                    />
+                  </div>
+                </div>
+
+                {/* Profile Card */}
+                <div className="px-4 mb-4">
+                  <div className="bg-orange-500 rounded-xl p-3 flex items-center gap-3 text-white shadow-sm">
+                    <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center font-bold text-lg shrink-0">
+                      D
+                    </div>
+                    <div>
+                      <div className="font-bold text-sm leading-tight">
+                        Dominos
+                      </div>
+                      <div className="text-[10px] bg-white/20 inline-flex items-center gap-1 px-1.5 py-0.5 rounded mt-1">
+                        <Zap size={10} className="fill-white" /> Pro Plan
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Navigation Links */}
+                <div className="flex-1 overflow-y-auto te-scrollbar px-3 flex flex-col gap-1 pb-4">
                   {[
-                    { label: "Revenue", value: "₹48.2k", color: "#10b981" },
-                    { label: "Orders", value: "142", color: "#f97316" },
-                    { label: "Active", value: "7", color: "#6366f1" },
-                    { label: "Avg Order", value: "₹340", color: "#f59e0b" },
-                  ].map((card) => (
+                    { icon: LayoutDashboard, label: "Dashboard", active: true },
+                    { icon: ShoppingBag, label: "Live Orders" },
+                    { icon: Utensils, label: "Menu" },
+                    { icon: Grid, label: "Tables" },
+                    { icon: History, label: "Order History" },
+                    { icon: Users, label: "Manage Staff" },
+                    { icon: Palette, label: "Theme" },
+                    { icon: CreditCard, label: "Subscription" },
+                    { icon: Settings, label: "Settings" },
+                  ].map((item, i) => (
                     <div
-                      key={card.label}
-                      className="bg-white/[0.05] rounded-lg p-2.5"
+                      key={item.label}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors cursor-default ${item.active ? "bg-orange-50 text-orange-600 font-medium" : "text-slate-500 hover:bg-slate-50"}`}
                     >
-                      <span className="block font-['Sora'] text-[9px] text-white/35 mb-1">
-                        {card.label}
-                      </span>
-                      <span
-                        className="block font-['Sora'] text-[15px] font-extrabold"
-                        style={{ color: card.color }}
-                      >
-                        {card.value}
-                      </span>
+                      <item.icon
+                        size={18}
+                        strokeWidth={item.active ? 2.5 : 2}
+                        className={
+                          item.active ? "text-orange-500" : "text-slate-400"
+                        }
+                      />
+                      <span className="text-sm">{item.label}</span>
+                      {item.active && (
+                        <div className="ml-auto w-1.5 h-1.5 rounded-full bg-orange-500" />
+                      )}
                     </div>
                   ))}
                 </div>
-                <div className="flex items-end gap-1.5 flex-1 px-1">
-                  {[40, 65, 45, 80, 55, 90, 70].map((h, i) => (
-                    <div
-                      key={i}
-                      className="bar-grow flex-1 rounded-t"
-                      style={{
-                        height: `${h}%`,
-                        background:
-                          "linear-gradient(180deg, #f97316 0%, rgba(249,115,22,0.3) 100%)",
-                        animationDelay: `${i * 100 + 600}ms`,
-                      }}
-                    />
-                  ))}
+
+                {/* Bottom User Profile */}
+                <div className="p-4 border-t border-slate-100 flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-bold text-xs shrink-0">
+                    S
+                  </div>
+                  <div className="text-xs font-medium text-slate-700 truncate">
+                    shreshthaagarwal123...
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Main Area ── */}
+              <div className="flex-1 bg-[#F9FAFB] flex flex-col overflow-hidden">
+                {/* Topbar */}
+                <div className="bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between shrink-0">
+                  <div className="font-bold text-slate-800">Dashboard</div>
+                  <div className="flex items-center gap-4">
+                    <div className="hidden sm:flex items-center gap-2 bg-orange-50 border border-orange-100 px-2.5 py-1 rounded-full">
+                      <div className="w-5 h-5 rounded-full bg-orange-500 text-white flex items-center justify-center text-[10px] font-bold">
+                        D
+                      </div>
+                      <span className="text-xs font-bold text-orange-800">
+                        Dominos
+                      </span>
+                      <span className="text-[9px] font-bold bg-orange-200 text-orange-800 px-1.5 rounded">
+                        PRO
+                      </span>
+                    </div>
+                    <Bell size={18} className="text-slate-400" />
+                  </div>
+                </div>
+
+                {/* Content Scroll Area */}
+                <div className="flex-1 overflow-y-auto te-scrollbar p-4 sm:p-8">
+                  {/* Page Header */}
+                  <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
+                    <div>
+                      <h1 className="text-2xl font-black text-slate-900 tracking-tight">
+                        Analytics
+                      </h1>
+                      <p className="text-slate-500 text-sm mt-1">
+                        Thursday, 9 April 2026
+                      </p>
+                    </div>
+                    <div className="inline-flex items-center gap-1.5 bg-white border border-slate-200 px-3 py-1.5 rounded-full shadow-sm">
+                      <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                      <span className="text-xs font-bold text-slate-700">
+                        Live
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Period Selector */}
+                  <div className="bg-white border border-slate-200 rounded-xl p-2 flex items-center gap-2 overflow-x-auto te-scrollbar mb-6">
+                    <div className="text-xs font-bold text-slate-400 px-2 flex items-center gap-1 shrink-0 uppercase tracking-wider">
+                      <Clock size={12} /> Period
+                    </div>
+                    {["24h", "7d", "30d", "90d", "1yr", "All"].map((p) => (
+                      <div
+                        key={p}
+                        className={`px-4 py-1.5 rounded-lg text-xs font-bold cursor-default shrink-0 ${p === "24h" ? "bg-orange-500 text-white shadow-sm" : "text-slate-500 hover:bg-slate-50"}`}
+                      >
+                        {p}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* KPI Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                    {/* Orders Card */}
+                    <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm relative overflow-hidden flex flex-col">
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-500 flex items-center justify-center">
+                          <ShoppingBag size={20} />
+                        </div>
+                        <div className="bg-emerald-50 text-emerald-600 text-[10px] font-bold px-2 py-1 rounded flex items-center gap-0.5">
+                          ↗ 12%
+                        </div>
+                      </div>
+                      <div className="text-xs font-medium text-slate-500 mb-1">
+                        Orders · 24h
+                      </div>
+                      <div className="text-3xl font-black text-slate-900 mb-1">
+                        45
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-auto">
+                        vs previous period
+                      </div>
+                      <div className="absolute bottom-0 left-0 right-0 h-1 bg-blue-500" />
+                    </div>
+
+                    {/* Revenue Card */}
+                    <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm relative overflow-hidden flex flex-col">
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-500 flex items-center justify-center">
+                          <DollarSign size={20} />
+                        </div>
+                        <div className="bg-emerald-50 text-emerald-600 text-[10px] font-bold px-2 py-1 rounded flex items-center gap-0.5">
+                          ↗ 8%
+                        </div>
+                      </div>
+                      <div className="text-xs font-medium text-slate-500 mb-1">
+                        Revenue · 24h
+                      </div>
+                      <div className="text-3xl font-black text-slate-900 mb-1">
+                        ₹12.4k
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-auto">
+                        vs previous period
+                      </div>
+                      <div className="absolute bottom-0 left-0 right-0 h-1 bg-emerald-500" />
+                    </div>
+
+                    {/* Active Orders Card */}
+                    <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm relative overflow-hidden flex flex-col">
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-orange-50 text-orange-500 flex items-center justify-center">
+                          <ChefHat size={20} />
+                        </div>
+                      </div>
+                      <div className="text-xs font-medium text-slate-500 mb-1">
+                        Active Orders
+                      </div>
+                      <div className="text-3xl font-black text-slate-900 mb-1">
+                        7
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-auto">
+                        in kitchen right now
+                      </div>
+                    </div>
+
+                    {/* Avg Order Value Card */}
+                    <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm relative overflow-hidden flex flex-col">
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-500 flex items-center justify-center">
+                          <TrendingUp size={20} />
+                        </div>
+                        <div className="bg-emerald-50 text-emerald-600 text-[10px] font-bold px-2 py-1 rounded flex items-center gap-0.5">
+                          ↗ 2%
+                        </div>
+                      </div>
+                      <div className="text-xs font-medium text-slate-500 mb-1">
+                        Avg. Order Value
+                      </div>
+                      <div className="text-3xl font-black text-slate-900 mb-1">
+                        ₹275
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-auto">
+                        vs previous period
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Chart Area */}
+                  <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                    <div className="flex justify-between items-start mb-6">
+                      <div>
+                        <h3 className="font-bold text-slate-900 text-sm">
+                          Performance Trend
+                        </h3>
+                        <p className="text-xs text-slate-500">
+                          Revenue & orders over 24h
+                        </p>
+                      </div>
+                      <div className="flex bg-slate-50 border border-slate-200 rounded-lg p-1">
+                        <button className="text-[10px] font-bold bg-white text-slate-800 px-3 py-1 rounded shadow-sm">
+                          Both
+                        </button>
+                        <button className="text-[10px] font-bold text-slate-500 px-3 py-1">
+                          Revenue
+                        </button>
+                        <button className="text-[10px] font-bold text-slate-500 px-3 py-1">
+                          Orders
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Fake Line Chart */}
+                    <div className="h-[180px] w-full flex items-end gap-1 sm:gap-2 relative border-b border-slate-100 pb-4">
+                      {/* Y-axis labels */}
+                      <div className="absolute left-0 top-0 bottom-4 flex flex-col justify-between text-[8px] text-slate-400 w-6">
+                        <span>₹4k</span>
+                        <span>₹3k</span>
+                        <span>₹2k</span>
+                        <span>₹1k</span>
+                        <span>₹0</span>
+                      </div>
+
+                      {/* Grid lines */}
+                      <div className="absolute left-6 right-0 top-0 bottom-4 flex flex-col justify-between pointer-events-none">
+                        {[0, 1, 2, 3, 4].map((i) => (
+                          <div
+                            key={i}
+                            className="w-full h-px border-t border-dashed border-slate-100"
+                          />
+                        ))}
+                      </div>
+
+                      {/* Bars/Line visualization mapping */}
+                      <div className="ml-6 flex-1 flex items-end justify-between h-full relative">
+                        {/* Fake SVG Line */}
+                        <svg
+                          className="absolute inset-0 w-full h-full"
+                          preserveAspectRatio="none"
+                          viewBox="0 0 100 100"
+                        >
+                          <path
+                            d="M0,80 L10,75 L20,60 L30,65 L40,40 L50,45 L60,20 L70,30 L80,15 L90,25 L100,10"
+                            fill="none"
+                            stroke="#f97316"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                          <path
+                            d="M0,80 L10,75 L20,60 L30,65 L40,40 L50,45 L60,20 L70,30 L80,15 L90,25 L100,10 L100,100 L0,100 Z"
+                            fill="url(#orange-gradient)"
+                            opacity="0.1"
+                          />
+                          <defs>
+                            <linearGradient
+                              id="orange-gradient"
+                              x1="0"
+                              y1="0"
+                              x2="0"
+                              y2="1"
+                            >
+                              <stop offset="0%" stopColor="#f97316" />
+                              <stop offset="100%" stopColor="transparent" />
+                            </linearGradient>
+                          </defs>
+                        </svg>
+
+                        {/* Data points */}
+                        {[80, 75, 60, 65, 40, 45, 20, 30, 15, 25, 10].map(
+                          (y, i) => (
+                            <div
+                              key={i}
+                              className="w-1.5 h-1.5 rounded-full bg-white border border-orange-500 absolute z-10"
+                              style={{
+                                left: `${i * 10}%`,
+                                top: `${y}%`,
+                                transform: "translate(-50%, -50%)",
+                              }}
+                            />
+                          ),
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-
-        {/* Scroll hint */}
-        <a
-          href="#features"
-          className="absolute bottom-7 left-1/2 text-slate-300"
-          style={{
-            animation: "bounce 2s ease-in-out infinite",
-            transform: "translateX(-50%)",
-          }}
-        >
-          <ChevronDown size={20} />
-        </a>
       </section>
 
-      {/* ── Stats ── */}
-      {/* <section id="stats" className="py-10 bg-slate-900" ref={statsRef}>
-        <div className="max-w-[1160px] mx-auto px-5">
-          <div className="grid grid-cols-2 md:grid-cols-4">
-            <StatItem value={500} suffix="+" label="Restaurants" start={statsVisible} />
-            <StatItem value={2} suffix="L+" label="Orders processed" start={statsVisible} />
-            <StatItem value={99} suffix="%" label="Uptime" start={statsVisible} />
-            <StatItem value={5} suffix=" min" label="Average setup time" start={statsVisible} />
-          </div>
-        </div>
-      </section> */}
-
-      {/* ── Features ── */}
-      <section id="features" className="py-20 sm:py-24">
-        <div className="max-w-[1160px] mx-auto px-5">
-          <div className="text-center mb-14">
-            <div className="inline-flex items-center gap-1.5 bg-orange-50 text-orange-500 font-['Sora'] text-xs font-bold px-3 py-1.5 rounded-full border border-orange-200/50 mb-4">
-              Features
-            </div>
+      {/* ── Features Bento Grid ── */}
+      <section id="features" className="py-24 bg-white relative">
+        <div className="max-w-6xl mx-auto px-5">
+          <div className="text-center mb-16">
             <h2
-              className="font-['Sora'] font-extrabold tracking-tight text-slate-900 mb-3.5"
-              style={{ fontSize: "clamp(28px, 4vw, 44px)" }}
+              className="font-['Sora'] font-extrabold tracking-tight text-slate-900 mb-4"
+              style={{ fontSize: "clamp(32px, 5vw, 48px)" }}
             >
-              Everything you need,
-              <br />
-              nothing you don&apos;t
+              Everything you need. <br className="hidden sm:block" /> Nothing
+              you don&apos;t.
             </h2>
-            <p className="text-[17px] text-slate-500 max-w-[480px] mx-auto leading-relaxed">
-              One platform handles orders, kitchen, menu, and payments — so you
-              focus on cooking.
+            <p className="text-lg text-slate-500 max-w-2xl mx-auto">
+              A carefully crafted suite of tools designed specifically to help
+              Indian restaurants handle high volume with zero friction.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {FEATURES.map((f, i) => (
               <div
-                key={f.title}
-                className="bg-white border border-slate-100 rounded-2xl p-7 transition-all duration-200 hover:shadow-[0_16px_48px_rgba(0,0,0,0.12)] hover:-translate-y-0.5 hover:border-transparent"
+                key={i}
+                className="group relative bg-[#FAFAFA] rounded-3xl p-8 border border-slate-200/60 overflow-hidden hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.05)] transition-all duration-300 hover:-translate-y-1"
               >
-                <div
-                  className="w-12 h-12 rounded-[13px] flex items-center justify-center mb-[18px]"
-                  style={{ background: f.bg, color: f.color }}
-                >
-                  <f.icon size={22} />
+                {/* Subtle Hover Gradient */}
+                <div className="absolute inset-0 bg-gradient-to-br from-white to-slate-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+
+                <div className="relative z-10">
+                  <div
+                    className="w-12 h-12 rounded-xl flex items-center justify-center mb-6 shadow-sm border border-white/50"
+                    style={{ background: f.bg, color: f.color }}
+                  >
+                    <f.icon size={24} strokeWidth={2} />
+                  </div>
+                  <h3 className="font-['Sora'] text-xl font-bold mb-3 text-slate-900">
+                    {f.title}
+                  </h3>
+                  <p className="text-slate-500 leading-relaxed font-medium">
+                    {f.desc}
+                  </p>
                 </div>
-                <h3 className="font-['Sora'] text-[16px] font-bold mb-2 text-slate-900">
-                  {f.title}
-                </h3>
-                <p className="text-[14px] text-slate-500 leading-relaxed">
-                  {f.desc}
-                </p>
               </div>
             ))}
           </div>
@@ -501,40 +716,38 @@ export default function HomePage() {
       </section>
 
       {/* ── How it works ── */}
-      <section className="py-20 sm:py-24 bg-slate-50">
-        <div className="max-w-[1160px] mx-auto px-5">
-          <div className="text-center mb-14">
-            <div className="inline-flex items-center gap-1.5 bg-orange-50 text-orange-500 font-['Sora'] text-xs font-bold px-3 py-1.5 rounded-full border border-orange-200/50 mb-4">
-              How it works
-            </div>
+      <section className="py-24 bg-slate-950 text-white relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-orange-500/10 rounded-full blur-[100px] pointer-events-none" />
+
+        <div className="max-w-6xl mx-auto px-5 relative z-10">
+          <div className="mb-16">
             <h2
-              className="font-['Sora'] font-extrabold tracking-tight text-slate-900"
-              style={{ fontSize: "clamp(28px, 4vw, 44px)" }}
+              className="font-['Sora'] font-extrabold tracking-tight mb-4"
+              style={{ fontSize: "clamp(32px, 5vw, 48px)" }}
             >
-              Live in 3 steps
+              Live in minutes.
             </h2>
+            <p className="text-lg text-slate-400 max-w-xl">
+              We eliminated the complex onboarding. Get your digital restaurant
+              running before your next lunch service.
+            </p>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-center sm:item-start justify-center flex-wrap gap-7">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
+            {/* Desktop connecting line */}
+            <div className="hidden md:block absolute top-8 left-[10%] right-[20%] h-px bg-gradient-to-r from-orange-500/50 to-transparent" />
+
             {STEPS.map((s, i) => (
-              <div
-                key={s.title}
-                className="flex flex-col items-center text-center max-w-[260px] px-5 w-full sm:w-auto relative"
-              >
-                <div className="w-[52px] h-[52px] rounded-full bg-orange-500 text-white font-['Sora'] text-xl font-extrabold flex items-center justify-center mb-4 shadow-[0_6px_20px_rgba(249,115,22,0.3)]">
+              <div key={s.title} className="relative z-10">
+                <div className="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-800 text-orange-500 font-['Sora'] text-2xl font-bold flex items-center justify-center mb-6 shadow-[inset_0_2px_10px_rgba(255,255,255,0.05)]">
                   {i + 1}
                 </div>
-                <h3 className="font-['Sora'] text-[16px] font-bold mb-1.5">
+                <h3 className="font-['Sora'] text-xl font-bold mb-3">
                   {s.title}
                 </h3>
-                <p className="text-[14px] text-slate-500 leading-relaxed">
+                <p className="text-slate-400 leading-relaxed text-base">
                   {s.desc}
                 </p>
-                {i < STEPS.length - 1 && (
-                  <div className="hidden sm:block absolute text-[28px] text-slate-300 right-[-28px] top-[14px]">
-                    →
-                  </div>
-                )}
               </div>
             ))}
           </div>
@@ -542,84 +755,77 @@ export default function HomePage() {
       </section>
 
       {/* ── Pricing ── */}
-      <section
-        id="pricing"
-        className="py-20 sm:py-24 bg-gradient-to-br from-orange-50 to-white"
-      >
-        <div className="max-w-[1160px] mx-auto px-5">
-          <div className="text-center mb-14">
-            <div className="inline-flex items-center gap-1.5 bg-orange-50 text-orange-500 font-['Sora'] text-xs font-bold px-3 py-1.5 rounded-full border border-orange-200/50 mb-4">
-              Pricing
-            </div>
+      <section id="pricing" className="py-24 bg-white relative">
+        <div className="absolute top-[-100px] left-[-100px] w-[400px] h-[400px] bg-slate-100 rounded-full blur-[100px] pointer-events-none" />
+
+        <div className="max-w-6xl mx-auto px-5 relative z-10">
+          <div className="text-center mb-20">
             <h2
-              className="font-['Sora'] font-extrabold tracking-tight text-slate-900 mb-3.5"
-              style={{ fontSize: "clamp(28px, 4vw, 44px)" }}
+              className="font-['Sora'] font-extrabold tracking-tight text-slate-900 mb-4"
+              style={{ fontSize: "clamp(32px, 5vw, 48px)" }}
             >
-              Simple, honest pricing
+              Simple, transparent pricing
             </h2>
-            <p className="text-[17px] text-slate-500 max-w-[480px] mx-auto leading-relaxed">
-              Start free. Upgrade when you&apos;re ready. No hidden fees.
+            <p className="text-lg text-slate-500 max-w-2xl mx-auto">
+              Start for free to test the waters. Upgrade to Pro when you are
+              ready to scale your operations.
             </p>
           </div>
 
           {plansLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 max-w-[960px] mx-auto">
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="skeleton h-[380px] rounded-[20px]" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+              {[0, 1].map((i) => (
+                <div key={i} className="skeleton h-[500px] rounded-[32px]" />
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 max-w-[960px] mx-auto items-start">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto items-stretch">
               {plans.map((plan) => (
                 <div
                   key={plan.id}
-                  className={`rounded-[20px] p-7 relative transition-all duration-200 ${
+                  className={`relative flex flex-col rounded-[32px] p-8 sm:p-10 transition-all duration-300 ${
                     plan.highlighted
-                      ? "bg-slate-900 border-slate-900 border-[1.5px] shadow-[0_20px_60px_rgba(0,0,0,0.2)] scale-[1.03]"
-                      : "bg-white border-[1.5px] border-slate-100 hover:shadow-[0_16px_48px_rgba(0,0,0,0.12)]"
+                      ? "bg-slate-950 text-white shadow-[0_20px_40px_-10px_rgba(15,23,42,0.3)] md:-translate-y-4 ring-1 ring-slate-800"
+                      : "bg-[#FAFAFA] border border-slate-200 text-slate-900"
                   }`}
                 >
+                  {plan.highlighted && (
+                    <div className="absolute inset-0 bg-gradient-to-b from-orange-500/10 to-transparent rounded-[32px] pointer-events-none" />
+                  )}
+
                   {plan.badge && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-orange-500 text-white font-['Sora'] text-[11px] font-bold px-3.5 py-1 rounded-full whitespace-nowrap">
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-gradient-to-r from-orange-500 to-rose-500 text-white font-['Sora'] text-xs font-bold px-4 py-1.5 rounded-full shadow-lg">
                       {plan.badge}
                     </div>
                   )}
 
-                  <div className="mb-5">
-                    <h3
-                      className={`font-['Sora'] text-[18px] font-bold mb-2 ${plan.highlighted ? "text-white" : "text-slate-900"}`}
-                    >
+                  <div className="mb-8 relative z-10">
+                    <h3 className="font-['Sora'] text-xl font-bold mb-4">
                       {plan.name}
                     </h3>
                     <div className="flex items-baseline gap-1">
                       {plan.price === null ? (
-                        <span
-                          className={`font-['Sora'] text-[28px] font-extrabold ${plan.highlighted ? "text-white" : "text-slate-900"}`}
-                        >
+                        <span className="font-['Sora'] text-4xl font-extrabold tracking-tight">
                           Custom
                         </span>
                       ) : plan.price === 0 ? (
                         <>
-                          <span
-                            className={`font-['Sora'] text-[36px] font-extrabold ${plan.highlighted ? "text-white" : "text-slate-900"}`}
-                          >
+                          <span className="font-['Sora'] text-5xl font-extrabold tracking-tight">
                             ₹0
                           </span>
                           <span
-                            className={`text-[14px] ${plan.highlighted ? "text-white/60" : "text-slate-500"}`}
+                            className={`font-medium ${plan.highlighted ? "text-slate-400" : "text-slate-500"}`}
                           >
-                            /mo
+                            /month
                           </span>
                         </>
                       ) : (
                         <>
-                          <span
-                            className={`font-['Sora'] text-[36px] font-extrabold ${plan.highlighted ? "text-white" : "text-slate-900"}`}
-                          >
+                          <span className="font-['Sora'] text-5xl font-extrabold tracking-tight">
                             ₹{plan.price.toLocaleString("en-IN")}
                           </span>
                           <span
-                            className={`text-[14px] ${plan.highlighted ? "text-white/60" : "text-slate-500"}`}
+                            className={`font-medium ${plan.highlighted ? "text-slate-400" : "text-slate-500"}`}
                           >
                             /{plan.interval || "mo"}
                           </span>
@@ -628,15 +834,16 @@ export default function HomePage() {
                     </div>
                   </div>
 
-                  <ul className="flex flex-col gap-2.5 mb-6 list-none p-0">
+                  <ul className="flex flex-col gap-4 mb-10 flex-1 relative z-10">
                     {plan.features.map((f: string) => (
-                      <li key={f} className="flex items-start gap-2">
-                        <CheckCircle
-                          size={14}
-                          className="text-emerald-500 mt-0.5 shrink-0"
-                        />
+                      <li key={f} className="flex items-start gap-3">
+                        <div
+                          className={`mt-1 rounded-full p-0.5 ${plan.highlighted ? "bg-orange-500/20 text-orange-400" : "bg-slate-200 text-slate-600"}`}
+                        >
+                          <CheckCircle size={14} strokeWidth={3} />
+                        </div>
                         <span
-                          className={`text-[14px] ${plan.highlighted ? "text-white/70" : "text-slate-600"}`}
+                          className={`font-medium ${plan.highlighted ? "text-slate-300" : "text-slate-600"}`}
                         >
                           {f}
                         </span>
@@ -646,10 +853,10 @@ export default function HomePage() {
 
                   <Link
                     href={plan.price === null ? "#contact" : "/signup"}
-                    className={`block w-full text-center py-3 rounded-xl font-['Sora'] text-[14px] font-bold transition-all ${
+                    className={`block w-full text-center py-4 rounded-xl font-['Sora'] text-[15px] font-bold transition-all relative z-10 ${
                       plan.highlighted
-                        ? "bg-orange-500 hover:bg-orange-600 text-white shadow-[0_4px_16px_rgba(249,115,22,0.35)]"
-                        : "border-[1.5px] border-slate-200 text-slate-700 hover:border-orange-400 hover:text-orange-500 hover:bg-orange-50"
+                        ? "bg-white text-slate-950 hover:bg-slate-100"
+                        : "bg-slate-900 text-white hover:bg-slate-800 shadow-md"
                     }`}
                   >
                     {plan.cta}
@@ -661,64 +868,43 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── Testimonials ── */}
-      {/* <section className="py-20 sm:py-24">
-        <div className="max-w-[1160px] mx-auto px-5">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 max-w-[520px] md:max-w-none mx-auto">
-            {TESTIMONIALS.map((t) => (
-              <div key={t.name} className="bg-white border border-slate-100 rounded-2xl p-7">
-                <div className="text-amber-400 text-[16px] tracking-widest mb-3">{"★".repeat(5)}</div>
-                <p className="text-[15px] text-slate-700 leading-relaxed mb-5 italic">"{t.quote}"</p>
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-orange-500 text-white font-['Sora'] font-bold text-[16px] flex items-center justify-center shrink-0">
-                    {t.name[0]}
-                  </div>
-                  <div>
-                    <strong className="block font-['Sora'] text-[14px] font-bold text-slate-900">{t.name}</strong>
-                    <span className="text-[12px] text-slate-500">{t.role}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section> */}
+      {/* ── CTA Bottom ── */}
+      <section className="py-24 px-5">
+        <div className="max-w-5xl mx-auto bg-gradient-to-br from-orange-500 to-rose-500 rounded-[40px] p-10 sm:p-20 text-center relative overflow-hidden shadow-[0_20px_40px_-15px_rgba(249,115,22,0.4)]">
+          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 mix-blend-overlay" />
 
-      {/* ── CTA ── */}
-      <section className="bg-orange-500 py-20 sm:py-24 text-center relative overflow-hidden">
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute w-[600px] h-[600px] rounded-full blur-[80px] opacity-50 bg-[radial-gradient(circle,rgba(249,115,22,0.2)_0%,transparent_70%)] -top-24 left-1/2 -translate-x-1/2" />
-        </div>
-        <div className="relative z-10 max-w-[1160px] mx-auto px-5">
-          <Star size={32} className="text-white/40 mx-auto mb-4" />
-          <h2
-            className="font-['Sora'] font-extrabold text-white leading-[1.2] tracking-tight mb-3.5"
-            style={{ fontSize: "clamp(28px, 4vw, 44px)" }}
-          >
-            Ready to modernize
-            <br />
-            your restaurant?
-          </h2>
-          <p className="text-[17px] text-white/75 mb-8">
-            Join 500+ restaurants already running on Tabrova
-          </p>
-          <Link
-            href="/signup"
-            className="inline-flex items-center gap-2 font-['Sora'] text-[15px] font-bold bg-white text-orange-500 px-7 py-4 rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.15)] hover:shadow-[0_8px_28px_rgba(0,0,0,0.2)] hover:-translate-y-0.5 transition-all"
-          >
-            Start free trial — no card needed <ArrowRight size={16} />
-          </Link>
+          <div className="relative z-10">
+            <h2
+              className="font-['Sora'] font-extrabold text-white tracking-tight mb-6"
+              style={{ fontSize: "clamp(32px, 5vw, 56px)" }}
+            >
+              Take control of your restaurant today.
+            </h2>
+            <p className="text-xl text-white/90 mb-10 max-w-2xl mx-auto font-medium">
+              Join hundreds of modern Indian restaurants operating faster,
+              smarter, and more profitably.
+            </p>
+            <Link
+              href="/signup"
+              className="inline-flex items-center justify-center gap-2 font-['Sora'] text-base font-bold bg-slate-950 text-white px-10 py-5 rounded-2xl hover:bg-slate-900 hover:scale-105 transition-all shadow-xl"
+            >
+              Start your free trial <ArrowRight size={18} />
+            </Link>
+          </div>
         </div>
       </section>
 
       {/* ── Footer ── */}
-      <footer id="contact" className="bg-slate-900 pt-16 pb-8">
-        <div className="max-w-[1160px] mx-auto px-5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10 mb-12">
+      <footer
+        id="contact"
+        className="bg-[#FAFAFA] border-t border-slate-200 pt-20 pb-10"
+      >
+        <div className="max-w-6xl mx-auto px-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-12 mb-16">
             {/* Brand */}
-            <div>
-              <Link href="/" className="flex items-center gap-2 mb-3">
-                <div className="relative w-30 h-10 rounded-xl overflow-hidden bg-white/10 flex items-center justify-center">
+            <div className="lg:col-span-1">
+              <Link href="/" className="flex items-center gap-2">
+                <div className="relative w-30  h-10 rounded-xl overflow-hidden  flex items-center justify-center">
                   <Image
                     src="/tabrova-logo.png"
                     alt="Tabrova"
@@ -727,93 +913,87 @@ export default function HomePage() {
                     className="object-contain w-full h-full"
                   />
                 </div>
-                {/* <span className="font-['Sora'] text-[18px] font-extrabold text-white">Tabrova</span> */}
               </Link>
-              <p className="text-[14px] text-white/40 leading-relaxed">
-                Modern restaurant management made simple for Indian restaurants.
+              <p className="text-slate-500 font-medium mb-6">
+                The operating system for modern restaurants.
               </p>
               <a
-                href="mailto:hello@tablesprint.in"
-                className="inline-block mt-3.5 text-[14px] text-orange-400 hover:text-orange-300 transition-colors"
+                href="mailto:hello@tabrova.com"
+                className="font-medium text-slate-900 hover:text-orange-500 transition-colors"
               >
-                hello@tablesprint.in
+                hello@tabrova.com
               </a>
             </div>
 
-            {/* Product */}
+            {/* Links */}
             <div>
-              <h4 className="font-['Sora'] text-[13px] font-bold text-white/50 uppercase tracking-[0.08em] mb-4">
+              <h4 className="font-['Sora'] font-bold text-slate-900 mb-6">
                 Product
               </h4>
-              <div className="flex flex-col gap-2.5">
+              <ul className="flex flex-col gap-4">
                 {[
                   { href: "#features", label: "Features" },
                   { href: "#pricing", label: "Pricing" },
-                  { href: "/login", label: "Login" },
-                  { href: "/signup", label: "Sign up" },
-                ].map(({ href, label }) => (
-                  <a
-                    key={label}
-                    href={href}
-                    className="text-[14px] text-white/50 hover:text-white transition-colors"
-                  >
-                    {label}
-                  </a>
+                  { href: "/login", label: "Log in" },
+                ].map((link) => (
+                  <li key={link.label}>
+                    <a
+                      href={link.href}
+                      className="text-slate-500 hover:text-slate-900 font-medium transition-colors"
+                    >
+                      {link.label}
+                    </a>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </div>
 
-            {/* Company */}
             <div>
-              <h4 className="font-['Sora'] text-[13px] font-bold text-white/50 uppercase tracking-[0.08em] mb-4">
+              <h4 className="font-['Sora'] font-bold text-slate-900 mb-6">
                 Company
               </h4>
-              <div className="flex flex-col gap-2.5">
+              <ul className="flex flex-col gap-4">
                 {[
-                  { label: "About", href: "/about" },
-                  { label: "Contact", href: "/contact" },
-                ].map(({ label, href }) => (
-                  <Link
-                    key={label}
-                    href={href}
-                    className="text-[14px] text-white/50 hover:text-white transition-colors"
-                  >
-                    {label}
-                  </Link>
+                  { href: "/about", label: "About" },
+                  { href: "/contact", label: "Contact" },
+                ].map((link) => (
+                  <li key={link.label}>
+                    <Link
+                      href={link.href}
+                      className="text-slate-500 hover:text-slate-900 font-medium transition-colors"
+                    >
+                      {link.label}
+                    </Link>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </div>
 
-            {/* Legal */}
             <div>
-              <h4 className="font-['Sora'] text-[13px] font-bold text-white/50 uppercase tracking-[0.08em] mb-4">
+              <h4 className="font-['Sora'] font-bold text-slate-900 mb-6">
                 Legal
               </h4>
-              <div className="flex flex-col gap-2.5">
+              <ul className="flex flex-col gap-4">
                 {[
                   { href: "/privacy-policy", label: "Privacy Policy" },
                   { href: "/terms-of-service", label: "Terms of Service" },
-                  { href: "/refund-policy", label: "Refund Policy" },
-                ].map(({ href, label }) => (
-                  <a
-                    key={label}
-                    href={href}
-                    className="text-[14px] text-white/50 hover:text-white transition-colors"
-                  >
-                    {label}
-                  </a>
+                ].map((link) => (
+                  <li key={link.label}>
+                    <Link
+                      href={link.href}
+                      className="text-slate-500 hover:text-slate-900 font-medium transition-colors"
+                    >
+                      {link.label}
+                    </Link>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </div>
           </div>
 
-          <div className="border-t border-white/[0.07] pt-6 flex flex-col sm:flex-row justify-between items-center gap-2 text-center">
-            <span className="text-[13px] text-white/30">
-              © 2026 Tabrova. All rights reserved.
-            </span>
-            <span className="text-[13px] text-white/30">
-              Made with ♥ in India
-            </span>
+          <div className="pt-8 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4 text-slate-500 font-medium text-sm">
+            <p>© 2026 Tabrova. All rights reserved.</p>
+            <p>Made in Agra, UP</p>
           </div>
         </div>
       </footer>
@@ -825,14 +1005,13 @@ export default function HomePage() {
 const FALLBACK_PLANS: Plan[] = [
   {
     id: "free",
-    name: "Free",
+    name: "Free Trial",
     price: 0,
     interval: "mo",
     features: [
       "5 menu items",
       "5 tables",
       "Unlimited orders",
-      "3 categories",
       "Basic analytics",
       "QR ordering",
       "UPI payments",
@@ -847,15 +1026,11 @@ const FALLBACK_PLANS: Plan[] = [
     interval: "mo",
     features: [
       "Unlimited menu items",
-      "Advanced analytics",
-      "Priority support",
-      "Week-over-week reports",
-      "Table revenue insights",
-      "Slow mover detection",
-      "Kitchen display",
-      "Chef staff accounts",
-      "UPI payments",
-      "Unlimited orders",
+      "Advanced revenue analytics",
+      "Live kitchen display",
+      "Chef & staff accounts",
+      "UPI  payments",
+      "Priority 24/7 support",
     ],
     highlighted: true,
     cta: "Start 14-Day Trial",
@@ -866,43 +1041,43 @@ const FALLBACK_PLANS: Plan[] = [
 const FEATURES = [
   {
     icon: Smartphone,
-    title: "QR Code Ordering",
-    desc: "Customers scan, browse, and order from their phone. No app needed.",
+    title: "App-free QR Ordering",
+    desc: "Guests scan, browse, and order instantly from their mobile browser. No downloads, no friction.",
     bg: "#fff7ed",
     color: "#f97316",
   },
   {
     icon: Clock,
-    title: "Real-time Kitchen",
-    desc: "Orders hit your kitchen display instantly. Update status live.",
+    title: "Live Kitchen Sync",
+    desc: "Orders flow straight to your kitchen display system. Update ticket status in real-time.",
     bg: "#eff6ff",
     color: "#3b82f6",
   },
   {
-    icon: UtensilsCrossed,
-    title: "Menu Management",
-    desc: "Add, edit, or remove items in seconds. Changes go live immediately.",
-    bg: "#f0fdf4",
-    color: "#10b981",
-  },
-  {
     icon: TrendingUp,
-    title: "Smart Analytics",
-    desc: "Revenue trends, top sellers, slow movers, and rush hour heatmaps.",
+    title: "Actionable Analytics",
+    desc: "See revenue trends, identify top-selling items, and spot slow movers before they cost you.",
     bg: "#fdf4ff",
     color: "#a855f7",
   },
   {
+    icon: UtensilsCrossed,
+    title: "Instant Menu Updates",
+    desc: "86 an item? Price change? Edit your menu once and it updates live on every QR code instantly.",
+    bg: "#f0fdf4",
+    color: "#10b981",
+  },
+  {
     icon: CheckCircle,
-    title: "Payment Integration",
-    desc: "Accept UPI, card, and cash. Auto-reconciliation built in.",
+    title: "Zero-Setup Payments",
+    desc: "Accept UPI directly to your bank account without expensive POS terminals or extra hardware.",
     bg: "#fefce8",
     color: "#eab308",
   },
   {
     icon: Star,
-    title: "Popular Item Tags",
-    desc: "Auto-detect bestsellers and highlight them to drive more orders.",
+    title: "Smart Recommendations",
+    desc: "Automatically highlight popular dishes and pairings to drive higher average order values.",
     bg: "#fff1f2",
     color: "#f43f5e",
   },
@@ -910,36 +1085,15 @@ const FEATURES = [
 
 const STEPS = [
   {
-    title: "Sign up",
-    desc: "Create your account and set up your restaurant profile in under 5 minutes.",
+    title: "Create your workspace",
+    desc: "Sign up and build your digital restaurant profile. No credit card required.",
   },
   {
-    title: "Add your menu",
-    desc: "Upload your categories and items. Set prices, availability, and veg/non-veg tags.",
+    title: "Upload your menu",
+    desc: "Add categories, items, and pricing. Tag your specials and dietary options.",
   },
   {
-    title: "Print QR codes",
-    desc: "Download QR codes for each table. Customers scan and start ordering.",
-  },
-];
-
-const TESTIMONIALS = [
-  {
-    name: "Ravi Sharma",
-    role: "Owner, Sharma Dhaba, Delhi",
-    quote:
-      "Orders are 40% faster since we switched. The kitchen display alone is worth it.",
-  },
-  {
-    name: "Priya Nair",
-    role: "Manager, Spice Garden, Kochi",
-    quote:
-      "Setup took 10 minutes. Now I can see revenue and top dishes from my phone anywhere.",
-  },
-  {
-    name: "Amit Joshi",
-    role: "Owner, The Curry House, Pune",
-    quote:
-      "My staff love the kitchen display. No more shouting orders across the restaurant.",
+    title: "Print & Serve",
+    desc: "Generate your custom table QR codes and you are immediately ready to take orders.",
   },
 ];

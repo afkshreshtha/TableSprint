@@ -19,15 +19,18 @@ export default function ContactPage() {
       <nav className="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-xl shadow-[0_1px_0_rgba(0,0,0,0.08)]">
         <div className="max-w-[1160px] mx-auto px-5">
           <div className="flex items-center justify-between h-16">
-            <div className="relative w-30  h-10 rounded-xl overflow-hidden  flex items-center justify-center">
-              <Image
-                src="/tabrova-logo.png"
-                alt="Tabrova"
-                width={100}
-                height={100}
-                className="object-contain w-full h-full"
-              />
-            </div>
+            <Link href="/" className="flex items-center gap-2">
+              <div className="relative w-30  h-10 rounded-xl overflow-hidden  flex items-center justify-center">
+                <Image
+                  src="/tabrova-logo.png"
+                  alt="Tabrova"
+                  width={100}
+                  height={100}
+                  className="object-contain w-full h-full"
+                />
+              </div>
+ 
+            </Link>
             <div className="flex items-center gap-2">
               <Link
                 href="/login"
