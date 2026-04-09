@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
-import { Save, Upload, Clock } from "lucide-react";
+import { Save, Clock } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 
 interface Restaurant {
@@ -46,17 +46,15 @@ export default function SettingsPage() {
       const user = userData.user;
       if (!user) return;
 
-      // ── Use maybeSingle() instead of single() so it returns null instead of erroring ──
       const { data, error } = await supabase
         .from("restaurants")
         .select("*")
         .eq("owner_id", user.id)
-        .maybeSingle();                          // ← KEY CHANGE
+        .maybeSingle();
 
       if (error) throw error;
 
       if (data) {
-        // Restaurant exists — populate form
         setRestaurant(data);
         setForm({
           name: data.name || "",
@@ -70,7 +68,6 @@ export default function SettingsPage() {
           closing_time: data.closing_time || "22:00",
         });
       } else {
-        // ── No restaurant found — create one automatically ──
         const defaultSlug = user.email
           ?.split("@")[0]
           .toLowerCase()
@@ -168,44 +165,46 @@ export default function SettingsPage() {
 
   return (
     <DashboardLayout>
-      <div className="max-w-4xl">
+      <div className="max-w-4xl mx-auto pb-10">
         {/* Header */}
-        <div className="mb-6">
-          <h2 className="text-2xl font-bold text-gray-900">
+        <div className="mb-4 sm:mb-6 px-2 sm:px-0">
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900">
             Restaurant Settings
           </h2>
-          <p className="text-gray-600 mt-1">
+          <p className="text-sm sm:text-base text-gray-600 mt-1">
             Manage your restaurant information and preferences
           </p>
         </div>
 
-        <form onSubmit={saveSettings} className="space-y-6">
+        <form onSubmit={saveSettings} className="space-y-4 sm:space-y-6">
           {/* Basic Information */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
               Basic Information
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   Restaurant Name
                 </label>
                 <input
                   type="text"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-600 focus:border-transparent"
+                  className="w-full text-base sm:text-sm px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-600 focus:border-transparent outline-none transition-all"
                   placeholder="Your Restaurant Name"
                   required
                 />
               </div>
 
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   URL Slug
                 </label>
-                <div className="flex items-center">
-                  <span className="text-gray-500 mr-2">tabrova.com/r/</span>
+                <div className="flex rounded-lg shadow-sm border border-gray-300 focus-within:ring-2 focus-within:ring-orange-600 focus-within:border-transparent overflow-hidden">
+                  <span className="inline-flex items-center px-3 bg-gray-50 text-gray-500 border-r border-gray-300 text-sm whitespace-nowrap">
+                    tabrova.com/r/
+                  </span>
                   <input
                     type="text"
                     value={form.slug}
@@ -217,19 +216,18 @@ export default function SettingsPage() {
                           .replace(/[^a-z0-9-]/g, "-"),
                       })
                     }
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-600 focus:border-transparent"
+                    className="flex-1 w-full text-base sm:text-sm px-3 py-2 border-none focus:ring-0 outline-none"
                     placeholder="your-restaurant"
                     required
                   />
                 </div>
-                <p className="text-sm text-gray-500 mt-1">
-                  This will be your restaurant's URL. Only lowercase letters,
-                  numbers, and hyphens.
+                <p className="text-xs sm:text-sm text-gray-500 mt-1.5">
+                  This will be your restaurant's URL. Only lowercase letters, numbers, and hyphens.
                 </p>
               </div>
 
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   Address
                 </label>
                 <textarea
@@ -237,21 +235,21 @@ export default function SettingsPage() {
                   onChange={(e) =>
                     setForm({ ...form, address: e.target.value })
                   }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-600 focus:border-transparent"
+                  className="w-full text-base sm:text-sm px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-600 focus:border-transparent outline-none transition-all"
                   placeholder="Full address"
                   rows={3}
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   Phone Number
                 </label>
                 <input
                   type="tel"
                   value={form.phone}
                   onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-600 focus:border-transparent"
+                  className="w-full text-base sm:text-sm px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-600 focus:border-transparent outline-none transition-all"
                   placeholder="+91 9876543210"
                 />
               </div>
@@ -259,14 +257,14 @@ export default function SettingsPage() {
           </div>
 
           {/* Operating Hours */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center space-x-2">
-              <Clock className="w-5 h-5" />
+              <Clock className="w-5 h-5 text-gray-500" />
               <span>Operating Hours</span>
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   Opening Time
                 </label>
                 <input
@@ -275,11 +273,11 @@ export default function SettingsPage() {
                   onChange={(e) =>
                     setForm({ ...form, opening_time: e.target.value })
                   }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-600 focus:border-transparent"
+                  className="w-full text-base sm:text-sm px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-600 focus:border-transparent outline-none transition-all"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   Closing Time
                 </label>
                 <input
@@ -288,46 +286,42 @@ export default function SettingsPage() {
                   onChange={(e) =>
                     setForm({ ...form, closing_time: e.target.value })
                   }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-600 focus:border-transparent"
+                  className="w-full text-base sm:text-sm px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-600 focus:border-transparent outline-none transition-all"
                 />
               </div>
             </div>
           </div>
 
           {/* Payment Settings */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
               Payment Settings
             </h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  UPI ID
-                </label>
-                <input
-                  type="text"
-                  value={form.upi_id}
-                  onChange={(e) => setForm({ ...form, upi_id: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-600 focus:border-transparent"
-                  placeholder="yourname@upi"
-                />
-                <p className="text-sm text-gray-500 mt-1">
-                  Used for generating UPI payment links
-                </p>
-              </div>
-
-
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                UPI ID
+              </label>
+              <input
+                type="text"
+                value={form.upi_id}
+                onChange={(e) => setForm({ ...form, upi_id: e.target.value })}
+                className="w-full text-base sm:text-sm px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-600 focus:border-transparent outline-none transition-all"
+                placeholder="yourname@upi"
+              />
+              <p className="text-xs sm:text-sm text-gray-500 mt-1.5">
+                Used for generating UPI payment links
+              </p>
             </div>
           </div>
 
           {/* Pricing Settings */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
               Pricing Settings
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   Service Charge (%)
                 </label>
                 <input
@@ -337,14 +331,14 @@ export default function SettingsPage() {
                   onChange={(e) =>
                     setForm({ ...form, service_charge_percent: e.target.value })
                   }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-600 focus:border-transparent"
+                  className="w-full text-base sm:text-sm px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-600 focus:border-transparent outline-none transition-all"
                   placeholder="5"
                   min="0"
                   max="100"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   Tax / GST (%)
                 </label>
                 <input
@@ -354,7 +348,7 @@ export default function SettingsPage() {
                   onChange={(e) =>
                     setForm({ ...form, tax_percent: e.target.value })
                   }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-600 focus:border-transparent"
+                  className="w-full text-base sm:text-sm px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-600 focus:border-transparent outline-none transition-all"
                   placeholder="5"
                   min="0"
                   max="100"
@@ -364,11 +358,11 @@ export default function SettingsPage() {
           </div>
 
           {/* Save Button */}
-          <div className="flex justify-end">
+          <div className="flex justify-end pt-2">
             <button
               type="submit"
               disabled={saving}
-              className="px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full sm:w-auto px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {saving ? (
                 <>
