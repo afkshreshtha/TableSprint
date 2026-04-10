@@ -101,7 +101,7 @@ export default function ResetPasswordPage() {
               <div className="w-12 h-12 bg-orange-600 rounded-lg flex items-center justify-center">
                 <UtensilsCrossed className="w-7 h-7 text-white" />
               </div>
-              <span className="text-3xl font-bold text-gray-900">TableSprint</span>
+              <span className="text-3xl font-bold text-gray-900">Tabrova</span>
             </div>
           </div>
 
@@ -134,7 +134,7 @@ export default function ResetPasswordPage() {
               <div className="w-12 h-12 bg-orange-600 rounded-lg flex items-center justify-center">
                 <UtensilsCrossed className="w-7 h-7 text-white" />
               </div>
-              <span className="text-3xl font-bold text-gray-900">TableSprint</span>
+              <span className="text-3xl font-bold text-gray-900">Tabrova</span>
             </div>
           </div>
 
@@ -166,7 +166,7 @@ export default function ResetPasswordPage() {
             <div className="w-12 h-12 bg-orange-600 rounded-lg flex items-center justify-center">
               <UtensilsCrossed className="w-7 h-7 text-white" />
             </div>
-            <span className="text-3xl font-bold text-gray-900">TableSprint</span>
+            <span className="text-3xl font-bold text-gray-900">Tabrova</span>
           </div>
           <p className="text-gray-600">Restaurant Management System</p>
         </div>

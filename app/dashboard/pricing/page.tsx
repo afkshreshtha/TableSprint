@@ -213,7 +213,7 @@ export default function PricingPage() {
       const options = {
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID!,
         subscription_id: data.subscriptionId,
-        name: "TableSprint",
+        name: "Tabrova",
         description: `${data.planName} - ${data.billingCycle}`,
         prefill: { name: data.name, email: data.email },
         theme: { color: "#ea580c" },
@@ -341,7 +341,7 @@ export default function PricingPage() {
               Subscription & Billing
             </h1>
             <p className="text-gray-500 mt-1 text-sm">
-              Manage your TableSprint plan
+              Manage your Tabrova plan
             </p>
           </div>
 

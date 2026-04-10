@@ -196,7 +196,7 @@ function InactiveTableScreen({
           {" "}
           <div className="h-px w-8 bg-white/10" />{" "}
           <span className="text-white/15 text-[10px] tracking-[0.25em]">
-            TABLESPRINT
+            TABROVA
           </span>{" "}
           <div className="h-px w-8 bg-white/10" />{" "}
         </div>{" "}

@@ -86,7 +86,7 @@ export default function ContactPage() {
           <div className="grid sm:grid-cols-2 gap-5 mb-16">
             {/* Email */}
             <a
-              href="mailto:hello@tablesprint.in"
+              href="mailto:hello@tabrova.com"
               className="group bg-white border border-slate-100 rounded-2xl p-8 hover:shadow-[0_16px_48px_rgba(0,0,0,0.1)] hover:-translate-y-1 transition-all"
             >
               <div className="w-12 h-12 rounded-xl bg-orange-50 flex items-center justify-center mb-5 group-hover:bg-orange-100 transition-colors">
@@ -100,7 +100,7 @@ export default function ContactPage() {
                 — drop us an email.
               </p>
               <span className="font-['Sora'] text-[15px] font-semibold text-orange-500 group-hover:text-orange-600 transition-colors">
-                hello@tablesprint.in
+                hello@tabrova.com
               </span>
             </a>
 
@@ -173,7 +173,7 @@ export default function ContactPage() {
             <p className="text-[14px] text-slate-400">
               Still have questions?{" "}
               <a
-                href="mailto:hello@tablesprint.in"
+                href="mailto:hello@tabrova.com"
                 className="text-orange-500 font-semibold hover:text-orange-600 transition-colors"
               >
                 Email us

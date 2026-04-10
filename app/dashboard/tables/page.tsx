@@ -321,13 +321,13 @@ ${
   isPro
     ? `${b.restaurantName ? `<div class="restaurant-name">${b.restaurantName}</div>` : ""}
      ${b.tagline ? `<div class="tagline">${b.tagline}</div>` : ""}`
-    : `<div class="restaurant-name" style="color:#ea580c">TableSprint</div>
+    : `<div class="restaurant-name" style="color:#ea580c">Tabrova</div>
      <div class="tagline">QR Ordering App</div>`
 }
           <div id="qr-print" class="qr-wrapper"></div>
           <div class="table-badge">Table ${selectedTable?.table_number}</div>
           ${b.showUrl ? `<div class="url">${url}</div>` : ""}
-          <div class="powered">Powered by TableSprint</div>
+          <div class="powered">Powered by Tabrova</div>
         </div>
         <script src="https://cdn.jsdelivr.net/npm/qr-code-styling@1.5.0/lib/qr-code-styling.js"></script>
         <script>
@@ -683,7 +683,7 @@ ${
                           letterSpacing: "-0.5px",
                         }}
                       >
-                        TableSprint
+                        Tabrova
                       </p>
                       <p
                         style={{

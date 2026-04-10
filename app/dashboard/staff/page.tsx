@@ -343,7 +343,7 @@ export default function StaffPage() {
         <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-800">
           <p className="font-semibold mb-1">How it works</p>
           <p>1. Add your chef's name and Google email above.</p>
-          <p>2. Chef goes to <strong>tablesprint.com/login</strong> and signs in with Google.</p>
+          <p>2. Chef goes to <strong>Tabrova.com/login</strong> and signs in with Google.</p>
           <p>3. They are automatically redirected to the Kitchen Display — no dashboard access.</p>
         </div>
       </DashboardLayout>
