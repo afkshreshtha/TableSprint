@@ -101,7 +101,7 @@ export default function TermsOfServicePage() {
                   that no unauthorized person gains access to your account.
                 </p>
                 <p>
-                  You must notify us immediately at <a href="mailto:hello@tabrova.in">hello@tabrova.in</a> upon becoming
+                  You must notify us immediately at <a href="mailto:hello@tabrova.com ">hello@tabrova.com </a> upon becoming
                   aware of any actual or suspected unauthorized access, breach, or compromise of your account. We will not be
                   liable for any loss or damage arising from your failure to comply with this obligation.
                 </p>
@@ -318,7 +318,7 @@ export default function TermsOfServicePage() {
                 <p>
                   Upon termination of your account: (i) your right to access the Service ceases immediately; (ii) we will retain
                   your data for a period of thirty (30) days from the date of termination, during which you may request an export
-                  of your data by writing to <a href="mailto:hello@tabrova.in">hello@tabrova.in</a>; (iii) after the 30-day
+                  of your data by writing to <a href="mailto:hello@tabrova.com ">hello@tabrova.com </a>; (iii) after the 30-day
                   period, your data will be permanently deleted from our systems, except where retention is required by applicable law.
                 </p>
                 <p>
@@ -337,7 +337,7 @@ export default function TermsOfServicePage() {
                 </p>
                 <ul>
                   <li><strong>Name:</strong> Shreshtha Agarwal, Tabrova</li>
-                  <li><strong>Email:</strong> <a href="mailto:hello@tabrova.in">hello@tabrova.in</a></li>
+                  <li><strong>Email:</strong> <a href="mailto:hello@tabrova.com ">hello@tabrova.com </a></li>
                   <li><strong>Address:</strong> tabrova, Agra, Uttar Pradesh – 282005, India</li>
                 </ul>
                 <p>
@@ -443,7 +443,7 @@ export default function TermsOfServicePage() {
                   If you have any questions, concerns, or feedback regarding these Terms of Service, please contact us at:
                 </p>
                 <ul>
-                  <li><strong>Email:</strong> <a href="mailto:hello@tabrova.in">hello@tabrova.in</a></li>
+                  <li><strong>Email:</strong> <a href="mailto:hello@tabrova.com ">hello@tabrova.com </a></li>
                   <li><strong>Address:</strong> tabrova, Agra, Uttar Pradesh – 282005, India</li>
                 </ul>
               </section>
@@ -474,7 +474,7 @@ export default function TermsOfServicePage() {
 }
 
 const CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@400;500&display=swap');
+  @import url('https://fonts.googleapis.com /css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@400;500&display=swap');
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {

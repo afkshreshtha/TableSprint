@@ -44,7 +44,7 @@ export default function PrivacyPolicyPage() {
                 Tabrova is committed to protecting
                 your privacy. This Privacy Policy explains how we collect, use,
                 and safeguard information when you use our restaurant management
-                platform at <a href="https://tabrova.in">tabrova.in</a>.
+                platform at <a href="https://tabrova.com ">tabrova.com </a>.
               </p>
             </div>
 
@@ -174,7 +174,7 @@ export default function PrivacyPolicyPage() {
                 </ul>
                 <p>
                   To exercise any of these rights, contact us at{" "}
-                  <a href="mailto:hello@tabrova.in">hello@tabrova.in</a>
+                  <a href="mailto:hello@tabrova.com ">hello@tabrova.com </a>
                   .
                 </p>
               </section>
@@ -213,7 +213,7 @@ export default function PrivacyPolicyPage() {
                 <h2>10. Contact</h2>
                 <p>
                   For privacy-related concerns, contact us at{" "}
-                  <a href="mailto:hello@tabrova.in">hello@tabrova.in</a>
+                  <a href="mailto:hello@tabrova.com ">hello@tabrova.com </a>
                   .
                 </p>
               </section>
@@ -243,7 +243,7 @@ export default function PrivacyPolicyPage() {
 }
 
 const CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@400;500&display=swap');
+  @import url('https://fonts.googleapis.com /css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@400;500&display=swap');
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {

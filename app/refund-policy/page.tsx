@@ -120,7 +120,7 @@ export default function RefundPolicyPage() {
                 </p>
                 <p>
                   To report such an issue, contact us at{' '}
-                  <a href="mailto:hello@tabrova.in">hello@tabrova.in</a>.
+                  <a href="mailto:hello@tabrova.com ">hello@tabrova.com </a>.
                 </p>
               </section>
 
@@ -147,7 +147,7 @@ export default function RefundPolicyPage() {
                 <h2>9. Contact</h2>
                 <p>
                   For any billing questions, contact our support team at{' '}
-                  <a href="mailto:hello@tabrova.in">hello@tabrova.in</a>. We typically respond
+                  <a href="mailto:hello@tabrova.com ">hello@tabrova.com </a>. We typically respond
                   within 1–2 business days.
                 </p>
               </section>
@@ -178,7 +178,7 @@ export default function RefundPolicyPage() {
 }
 
 const CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@400;500&display=swap');
+  @import url('https://fonts.googleapis.com /css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@400;500&display=swap');
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
