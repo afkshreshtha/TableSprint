@@ -47,10 +47,10 @@ export default function CartUI({ restaurant }: { restaurant: Restaurant }) {
   const taxRate           = (restaurant.tax_percent ?? 0) / 100;
   const serviceChargeRate = (restaurant.service_charge_percent ?? 0) / 100;
 
-  const subtotal      = cart.total;
-  const tax           = subtotal * taxRate;
-  const serviceCharge = subtotal * serviceChargeRate;
-  const total         = subtotal + tax + serviceCharge;
+const subtotal      = cart.total;
+const tax           = Math.round(subtotal * taxRate * 100) / 100;
+const serviceCharge = Math.round(subtotal * serviceChargeRate * 100) / 100;
+const total         = Math.round((subtotal + tax + serviceCharge) * 100) / 100;
 
   const upiParams = new URLSearchParams({
     pa: restaurant.upi_id || "",
@@ -320,10 +320,10 @@ export default function CartUI({ restaurant }: { restaurant: Restaurant }) {
               <div className="cu__card-row">
                 <div className="cu__info">
                   <h3 className="cu__name">{item.name}</h3>
-                  <p className="cu__price"><span className="cu__rupee">₹</span>{item.price.toFixed(0)} each</p>
+                  <p className="cu__price"><span className="cu__rupee">₹</span>{item.price.toFixed(2)} each</p>
                 </div>
                 <div className="cu__right">
-                  <p className="cu__subtotal"><span className="cu__rupee">₹</span>{(item.price * item.quantity).toFixed(0)}</p>
+                  <p className="cu__subtotal"><span className="cu__rupee">₹</span>{(item.price * item.quantity).toFixed(2)}</p>
                   <div className="cu__counter">
                     <button className="cu__cbtn cu__minus" onClick={() => {
                       if (item.quantity === 1) {
@@ -362,25 +362,25 @@ export default function CartUI({ restaurant }: { restaurant: Restaurant }) {
           <div className="cu__bill">
             <div className="cu__bill-row">
               <span className="cu__bill-lbl">Subtotal</span>
-              <span className="cu__bill-val"><span className="cu__rupee">₹</span>{subtotal.toFixed(0)}</span>
+              <span className="cu__bill-val"><span className="cu__rupee">₹</span>{subtotal.toFixed(2)}</span>
             </div>
             {/* Only render rows when the restaurant has configured a non-zero rate */}
             {taxRate > 0 && (
               <div className="cu__bill-row">
                 <span className="cu__bill-lbl">GST ({restaurant.tax_percent}%)</span>
-                <span className="cu__bill-val"><span className="cu__rupee">₹</span>{tax.toFixed(0)}</span>
+                <span className="cu__bill-val"><span className="cu__rupee">₹</span>{tax.toFixed(2)}</span>
               </div>
             )}
             {serviceChargeRate > 0 && (
               <div className="cu__bill-row">
                 <span className="cu__bill-lbl">Service Charge ({restaurant.service_charge_percent}%)</span>
-                <span className="cu__bill-val"><span className="cu__rupee">₹</span>{serviceCharge.toFixed(0)}</span>
+                <span className="cu__bill-val"><span className="cu__rupee">₹</span>{serviceCharge.toFixed(2)}</span>
               </div>
             )}
             <div className="cu__bill-total-row">
               <span className="cu__bill-total-lbl">Total</span>
               <span className="cu__bill-total-val">
-                <span className="cu__rupee" style={{ fontSize: "0.75em" }}>₹</span>{total.toFixed(0)}
+                <span className="cu__rupee" style={{ fontSize: "0.75em" }}>₹</span>{total.toFixed(2)}
               </span>
             </div>
           </div>
@@ -407,7 +407,7 @@ export default function CartUI({ restaurant }: { restaurant: Restaurant }) {
           {paymentMethod === "upi" && restaurant.upi_id && (
             <div className="cu__upi-box">
               <div className="cu__upi-qr"><QRCodeSVG value={upiLink} size={150} /></div>
-              <p className="cu__upi-lbl">Scan with any UPI app to pay <span className="cu__rupee">₹</span>{total.toFixed(0)}</p>
+              <p className="cu__upi-lbl">Scan with any UPI app to pay <span className="cu__rupee">₹</span>{total.toFixed(2)}</p>
               <a href={upiLink} className="cu__upi-btn"><Smartphone size={14} /> Open UPI App</a>
             </div>
           )}
@@ -416,7 +416,7 @@ export default function CartUI({ restaurant }: { restaurant: Restaurant }) {
             <div className="cu__cash-box">
               <p className="cu__cash-sub" style={{ marginBottom: 4 }}>Amount to pay at counter</p>
               <p className="cu__cash-amount">
-                <span className="cu__rupee" style={{ fontSize: "0.72em", fontWeight: 700 }}>₹</span>{total.toFixed(0)}
+                <span className="cu__rupee" style={{ fontSize: "0.72em", fontWeight: 700 }}>₹</span>{total.toFixed(2)}
               </p>
               <p className="cu__cash-sub">Our staff will collect payment when your order is ready</p>
             </div>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { Save, Clock } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
+import { validatePattern, ValidateVPA } from 'bhimupijs';
 
 interface Restaurant {
   id: string;
@@ -23,6 +24,12 @@ export default function SettingsPage() {
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+const [upiInfo, setUpiInfo] = useState<{
+  isQueryPatternValid: boolean;
+  tpap?: string;
+  pspBank?: string;
+  message: string;
+} | null>(null);
 
   const [form, setForm] = useState({
     name: "",
@@ -112,7 +119,21 @@ export default function SettingsPage() {
     }
   };
 
-  const saveSettings = async (e: React.FormEvent) => {
+const handleUpiChange = async (value: string) => {
+  setForm({ ...form, upi_id: value.trim() });
+  if (!value.trim()) {
+    setUpiInfo(null);
+    return;
+  }
+  try {
+
+    const result = validatePattern(value.trim());
+    setUpiInfo(result);
+  } catch {
+    setUpiInfo(null);
+  }
+};
+const saveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
 
@@ -125,7 +146,8 @@ export default function SettingsPage() {
         name: form.name,
         slug: form.slug,
         address: form.address,
-        phone: form.phone,
+        // Update this line to send null if the string is empty
+     phone: String(form.phone ?? "").trim() || null,
         upi_id: form.upi_id,
         service_charge_percent: parseFloat(form.service_charge_percent),
         tax_percent: parseFloat(form.tax_percent),
@@ -293,26 +315,65 @@ export default function SettingsPage() {
           </div>
 
           {/* Payment Settings */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Payment Settings
-            </h3>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                UPI ID
-              </label>
-              <input
-                type="text"
-                value={form.upi_id}
-                onChange={(e) => setForm({ ...form, upi_id: e.target.value })}
-                className="w-full text-base sm:text-sm px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-600 focus:border-transparent outline-none transition-all"
-                placeholder="yourname@upi"
-              />
-              <p className="text-xs sm:text-sm text-gray-500 mt-1.5">
-                Used for generating UPI payment links
+{/* Payment Settings */}
+<div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
+  <h3 className="text-lg font-semibold text-gray-900 mb-4">
+    Payment Settings
+  </h3>
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+      UPI ID
+    </label>
+    <div className="relative">
+      <input
+        type="text"
+        value={form.upi_id}
+        onChange={(e) => handleUpiChange(e.target.value)}
+        className={`w-full text-base sm:text-sm px-4 py-2 border rounded-lg focus:ring-2 focus:ring-orange-600 focus:border-transparent outline-none transition-all pr-10 ${
+          !upiInfo
+            ? "border-gray-300"
+            : upiInfo.isQueryPatternValid
+            ? "border-green-400 bg-green-50"
+            : "border-red-400 bg-red-50"
+        }`}
+        placeholder="yourname@oksbi"
+      />
+      {upiInfo && (
+        <span className="absolute right-3 top-1/2 -translate-y-1/2">
+          {upiInfo.isQueryPatternValid ? "✅" : "❌"}
+        </span>
+      )}
+    </div>
+
+    {/* Bank info pill */}
+    {upiInfo && (
+      <div className="mt-2">
+        {upiInfo.isQueryPatternValid ? (
+          <div className="flex flex-col gap-0.5">
+            {upiInfo.tpap && (
+              <p className="text-xs font-medium text-green-700">
+                📱 {upiInfo.tpap}
               </p>
-            </div>
+            )}
+            {upiInfo.pspBank && (
+              <p className="text-xs text-gray-500">
+                🏦 {upiInfo.pspBank}
+              </p>
+            )}
           </div>
+        ) : (
+          <p className="text-xs text-red-500">
+            ⚠️ {upiInfo.message}
+          </p>
+        )}
+      </div>
+    )}
+
+    <p className="text-xs text-gray-400 mt-2">
+      Used for generating UPI payment links for customers
+    </p>
+  </div>
+</div>
 
           {/* Pricing Settings */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
