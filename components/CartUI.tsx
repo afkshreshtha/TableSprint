@@ -329,6 +329,7 @@ const total         = Math.round((subtotal + tax + serviceCharge) * 100) / 100;
                       if (item.quantity === 1) {
                         if (confirm("Remove this item from cart?")) {
                           dispatch(decreaseItem(item.id));
+                        deleteCartFromSupabase();
                           const n = { ...specialInstructions }; delete n[item.id]; setSpecialInstructions(n);
                         }
                       } else { dispatch(decreaseItem(item.id)); }
